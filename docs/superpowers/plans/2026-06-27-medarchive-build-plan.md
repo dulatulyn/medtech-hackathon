@@ -12,9 +12,13 @@ layered `src/` (controller → service → repository), **Dishka** DI, cookie-JW
 (register/login/refresh/logout/me/profile), structured logging, health/readiness, async
 SQLAlchemy 2.0 + Alembic, ULID PKs + timestamps, exception handlers, response wrapper.
 
-**Tech added on top:** `pg_trgm` + `pgvector` (fuzzy + semantic), `arq` + Redis (workers),
-MinIO/S3 (raw files), parsers (openpyxl / python-docx / pdfplumber / pytesseract), LLM
-(Anthropic) for scan extraction + normalization tail, optional Meilisearch.
+**Tech added on top:** `pg_trgm` + `pgvector` (fuzzy + semantic). Infra-light by default —
+`LocalStorage` (filesystem) + `NoOpQueue` so it runs with zero extra services; `arq`+Redis
+and MinIO/S3 are the drop-in scale path. Parsers: openpyxl / python-docx / pdfplumber +
+**word-geometry** reconstruction for borderless tables. OCR (no Claude budget): pluggable
+`OcrProvider` — **Azure AI Document Intelligence** (free F0 tier, Layout → table cells) or
+self-hosted **PaddleOCR/EasyOCR** ($0). Embeddings: **local multilingual sentence-transformer**
+($0). LLM confirm / NL-search: optional (Azure OpenAI if credits). Optional Meilisearch.
 
 ## Global Constraints
 
