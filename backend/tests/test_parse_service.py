@@ -5,6 +5,7 @@ import openpyxl
 import pytest
 
 from src.enums import FileFormat, ParseStatus
+from src.integrations.ocr import NoOpOcrProvider
 from src.integrations.storage import LocalStorage
 from src.repositories.partner_repository import PartnerRepository
 from src.repositories.price_repository import PriceRepository
@@ -36,7 +37,7 @@ async def test_parse_document_persists_rows(db_session, tmp_path):
     )
     await db_session.flush()
 
-    service = ParseService(prices, storage)
+    service = ParseService(prices, storage, NoOpOcrProvider())
     count = await service.parse_document(doc.id)
     await db_session.commit()
 

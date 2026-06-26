@@ -38,6 +38,16 @@ class RedisConfig(BaseSettings):
     def redis_url(self) -> str:
         return f"redis://{self.host}:{self.port}/{self.db}"
 
+class OcrConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix='OCR_',
+        env_file=ENV_FILE,
+        extra='ignore',
+    )
+    azure_endpoint: str = ''
+    azure_key: str = ''
+
+
 class Config(BaseSettings):
     app_name: str = "Testing"
     debug: bool = False
@@ -51,6 +61,7 @@ class Config(BaseSettings):
 
     database: DatabaseConfig = DatabaseConfig()
     redis: RedisConfig = RedisConfig()
+    ocr: OcrConfig = OcrConfig()
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

@@ -2,12 +2,13 @@
 from dishka import Provider, Scope, provide
 
 from src.core.config import Config
+from src.integrations.ocr import AzureOcrProvider, NoOpOcrProvider, OcrProvider
 from src.integrations.queue import NoOpQueue, TaskQueue
 from src.integrations.storage import LocalStorage, ObjectStorage
 
 
 class InfraProvider(Provider):
-    """Provider for storage and queue singletons."""
+    """Provider for storage, queue, and OCR singletons."""
 
     @provide(scope=Scope.APP)
     def get_storage(self, config: Config) -> ObjectStorage:
@@ -18,3 +19,10 @@ class InfraProvider(Provider):
     def get_queue(self) -> TaskQueue:
         """Provide the background task queue."""
         return NoOpQueue()
+
+    @provide(scope=Scope.APP)
+    def get_ocr(self, config: Config) -> OcrProvider:
+        """Provide the OCR backend: Azure when a key is set, else a NoOp stub."""
+        if config.ocr.azure_key and config.ocr.azure_endpoint:
+            return AzureOcrProvider(config.ocr.azure_endpoint, config.ocr.azure_key)
+        return NoOpOcrProvider()

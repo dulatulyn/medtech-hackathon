@@ -1,0 +1,56 @@
+"""OCR provider abstraction. NoOp by default; swap for Azure/Paddle when a key is set."""
+from __future__ import annotations
+
+from typing import Protocol, runtime_checkable
+
+
+class OcrNotConfiguredError(RuntimeError):
+    """Raised when OCR is requested but no provider is configured."""
+
+
+@runtime_checkable
+class OcrProvider(Protocol):
+    """Extracts a plain-text layer from scanned document bytes."""
+
+    @property
+    def is_configured(self) -> bool: ...
+
+    async def extract_text(self, data: bytes) -> str: ...
+
+
+class NoOpOcrProvider:
+    """Placeholder used in infra-light mode when no OCR backend is wired."""
+
+    name = "noop"
+
+    @property
+    def is_configured(self) -> bool:
+        """Always unconfigured — callers should fall back to manual review."""
+        return False
+
+    async def extract_text(self, data: bytes) -> str:
+        """Refuse: no OCR backend available."""
+        raise OcrNotConfiguredError("no OCR provider configured")
+
+
+class AzureOcrProvider:
+    """Azure Document Intelligence (Read) backend. Configured when key + endpoint set.
+
+    The HTTP call is intentionally deferred — this is the pluggable seam. As soon as a
+    key is present the parse pipeline will route scans here instead of needs_review.
+    """
+
+    name = "azure"
+
+    def __init__(self, endpoint: str, key: str):
+        self.endpoint = endpoint
+        self.key = key
+
+    @property
+    def is_configured(self) -> bool:
+        """Configured only when both endpoint and key are present."""
+        return bool(self.endpoint and self.key)
+
+    async def extract_text(self, data: bytes) -> str:
+        """Call Azure Read OCR and return the concatenated text layer."""
+        raise NotImplementedError("AzureOcrProvider.extract_text not yet implemented")

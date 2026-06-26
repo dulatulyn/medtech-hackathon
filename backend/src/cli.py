@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.core.config import config
+from src.integrations.ocr import AzureOcrProvider, NoOpOcrProvider, OcrProvider
 from src.integrations.queue import NoOpQueue
 from src.integrations.storage import LocalStorage
 from src.repositories.catalog_repository import CatalogRepository
@@ -19,6 +20,13 @@ from src.services.import_service import ImportService
 from src.services.normalization_service import NormalizationService
 from src.services.parse_service import ParseService
 from src.services.validation_service import ValidationService
+
+
+def _build_ocr() -> OcrProvider:
+    """Build the OCR provider from config: Azure when a key is set, else NoOp."""
+    if config.ocr.azure_key and config.ocr.azure_endpoint:
+        return AzureOcrProvider(config.ocr.azure_endpoint, config.ocr.azure_key)
+    return NoOpOcrProvider()
 
 
 async def _import_archive(path: str) -> None:
@@ -41,7 +49,9 @@ async def _parse_pending() -> None:
     engine = create_async_engine(config.db_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
-        service = ParseService(PriceRepository(session), LocalStorage(config.storage_dir))
+        service = ParseService(
+            PriceRepository(session), LocalStorage(config.storage_dir), _build_ocr()
+        )
         counts = await service.parse_pending()
         await session.commit()
     await engine.dispose()

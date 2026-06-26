@@ -3,6 +3,7 @@
 from dishka import Provider, Scope, provide
 
 from src.core.config import Config
+from src.integrations.ocr import OcrProvider
 from src.integrations.queue import TaskQueue
 from src.integrations.storage import ObjectStorage
 from src.repositories.auth_repository import AuthRepository
@@ -45,10 +46,10 @@ class ServiceProvider(Provider):
 
     @provide(scope=Scope.REQUEST)
     def get_parse_service(
-        self, price_repository: PriceRepository, storage: ObjectStorage
+        self, price_repository: PriceRepository, storage: ObjectStorage, ocr: OcrProvider
     ) -> ParseService:
         """Provide ParseService for the current request."""
-        return ParseService(price_repository, storage)
+        return ParseService(price_repository, storage, ocr)
 
     @provide(scope=Scope.REQUEST)
     def get_normalization_service(
