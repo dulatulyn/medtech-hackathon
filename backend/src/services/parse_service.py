@@ -9,6 +9,8 @@ from src.repositories.price_repository import PriceRepository
 
 logger = get_logger(__name__)
 
+_SCAN_REQUIRES_OCR = "scan_requires_ocr"
+
 
 class ParseService:
     """Turns a pending price document into persisted price items + tariffs."""
@@ -27,15 +29,25 @@ class ParseService:
         try:
             data = await self.storage.get(doc.object_key)
             result = parse_bytes(data, doc.file_format)
+
+            if _SCAN_REQUIRES_OCR in result.warnings and not result.rows:
+                doc.parse_status = ParseStatus.needs_review
+                doc.parse_log = "needs_ocr: no Azure key configured; mark for manual OCR"
+                logger.info("document_needs_ocr", doc_id=doc.id)
+                return 0
+
             for raw in result.rows:
                 item = await self.prices.add_item(
-                    doc_id=doc.id, partner_id=doc.partner_id,
+                    doc_id=doc.id,
+                    partner_id=doc.partner_id,
                     service_name_raw=raw.service_name_raw,
                     service_code_source=raw.service_code_source,
                     provenance=raw.provenance,
+                    effective_date=doc.effective_date,
                 )
                 for tariff in raw.tariffs:
                     await self.prices.add_tariff(item.id, tariff.amount, tariff.tariff_type)
+
             doc.parse_status = ParseStatus.done if result.rows else ParseStatus.needs_review
             doc.parse_log = "; ".join(result.warnings) if result.warnings else f"{len(result.rows)} rows"
             logger.info("document_parsed", doc_id=doc.id, rows=len(result.rows), status=doc.parse_status.value)

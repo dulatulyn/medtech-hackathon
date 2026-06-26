@@ -8,6 +8,9 @@ from src.parsers.excel import parse_excel
 from src.parsers.pdf_text import parse_pdf_text
 
 
+_SCAN_REQUIRES_OCR = "scan_requires_ocr"
+
+
 def parse_bytes(data: bytes, file_format: FileFormat) -> ParseResult:
     """Dispatch raw document bytes to the matching format parser."""
     if file_format in (FileFormat.xlsx, FileFormat.xls):
@@ -16,7 +19,7 @@ def parse_bytes(data: bytes, file_format: FileFormat) -> ParseResult:
         return parse_docx(data)
     if file_format in (FileFormat.pdf, FileFormat.scan_pdf):
         result = parse_pdf_text(data)
-        if not result.rows and "scan_requires_ocr" not in result.warnings:
-            result.warnings.append("scan_requires_ocr")  # OCR provider wired in a later step
+        if not result.rows and _SCAN_REQUIRES_OCR not in result.warnings:
+            result.warnings.append(_SCAN_REQUIRES_OCR)
         return result
     raise ValueError(f"unsupported format: {file_format}")

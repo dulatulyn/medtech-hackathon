@@ -95,6 +95,28 @@ async def parse_all_pending(service: FromDishka[ParseService]):
     return {"processed": len(counts), "results": counts}
 
 
+@router.post("/pipeline/{doc_id}")
+@handle_service_errors
+async def run_pipeline(
+    doc_id: str,
+    parse_svc: FromDishka[ParseService],
+    norm_svc: FromDishka[NormalizationService],
+    val_svc: FromDishka[ValidationService],
+):
+    """Run the full pipeline for a document: parse → normalize → validate."""
+    rows = await parse_svc.parse_document(doc_id)
+    norm = await norm_svc.normalize_document(doc_id)
+    val = await val_svc.validate_document(doc_id)
+    return {
+        "doc_id": doc_id,
+        "rows": rows,
+        "matched": norm.matched,
+        "unmatched": norm.unmatched,
+        "anomalies": val.anomalies,
+        "archived": val.archived,
+    }
+
+
 @router.get("/stats")
 @handle_service_errors
 async def get_stats(
