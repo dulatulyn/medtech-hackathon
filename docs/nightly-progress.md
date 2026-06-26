@@ -33,9 +33,16 @@
 - Excel (openpyxl + xlrd), DOCX (python-docx), PDF text + geometry
 - `pdf_geometry`: borderless table reconstruction via word-position clustering
 - `columns.resolve_header`: two-row header merge + tariff-keyword detection
-- OCR stub: scan PDFs with empty text-layer → `needs_review` status (no Azure key)
 - **Coverage**: 8/10 files extract well (Клиника 1,2,3,4,6,7,8 xlsx + some PDFs)
-- Клиника 5 (scrambled OCR layer) → `needs_review`
+- Клиника 5 (scrambled OCR layer) → routes through OcrProvider, falls back to `needs_review`
+
+### P4b OcrProvider seam (this session)
+- `src/integrations/ocr.py` — `OcrProvider` Protocol + `NoOpOcrProvider` (infra-light) + `AzureOcrProvider` stub
+- Config `OCR_AZURE_ENDPOINT` / `OCR_AZURE_KEY`; DI-wired at APP scope (`InfraProvider.get_ocr`)
+- `ParseService._try_ocr`: text-less scans route through OCR when configured; else `needs_review`
+  with explanatory `parse_log` (`needs_ocr` / `ocr_unavailable` / `ocr_text_extracted`)
+- CLI `_build_ocr()` mirrors container selection
+- **6 OCR unit tests — all green**; Azure HTTP call is the documented next step
 
 ### P5 Normalization (this session)
 - `src/normalization/cascade.py` — 4-step cascade: code → exact → synonym → fuzzy (pg_trgm)
@@ -93,10 +100,20 @@
 ---
 
 ## Test Summary
-- **31 pure unit tests, all green** (no DB required)
+- **38 pure unit tests, all green** (no DB required); 7 DB-connected tests need live Postgres
   - 17 parser tests (cleaning, columns, docx, excel)
   - 9 normalization cascade tests
   - 5 validation service tests
+  - 6 OCR provider seam tests
+
+---
+
+## Frontend integration (this session)
+- Frontend dev pushed React UI (`frontend/`, commit `6f72b63`) — pages: Landing, Dashboard,
+  Catalog, Service, Clinic, Search, Verify, Match, Anomalies, Documents, Upload.
+- Currently runs on mock data (`src/data.js`); no API calls yet. Owned by frontend dev — not modified.
+- **Backend is integration-ready**: CORS `*` + credentials; `{data: ...}` envelope.
+- Wrote `docs/api-contract.md` — full endpoint → `data.js` mapping for the frontend dev to wire.
 
 ---
 
