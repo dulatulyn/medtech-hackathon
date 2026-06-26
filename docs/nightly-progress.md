@@ -100,11 +100,15 @@
 ---
 
 ## Test Summary
-- **38 pure unit tests, all green** (no DB required); 7 DB-connected tests need live Postgres
-  - 17 parser tests (cleaning, columns, docx, excel)
-  - 9 normalization cascade tests
-  - 5 validation service tests
-  - 6 OCR provider seam tests
+- **45 tests, all green** — verified end-to-end against a pgvector Postgres
+  - 38 pure unit (parsers, normalization cascade, validation, OCR seam) — no DB
+  - 7 DB-connected (auth flow, catalog, domain round-trip, import, parse→persist)
+- Run DB tests: `DB_HOST=localhost DB_PORT=<pg> DB_USER=.. DB_PASSWORD=.. DB_NAME=.. SECRET_KEY=x uv run pytest`
+  (needs a Postgres with `pg_trgm` + `vector`; conftest provisions `<name>_test` automatically)
+
+### Fixes (this session)
+- `create_app()` now registers all routers via `_register_routes()` — previously the factory
+  returned a routeless app, so the test client (and any factory caller) 404'd on every endpoint.
 
 ---
 
