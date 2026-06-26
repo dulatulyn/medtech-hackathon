@@ -54,6 +54,8 @@ class PriceItem(ULIDMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     superseded_by: Mapped[str | None] = mapped_column(String(26), nullable=True)
     provenance: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    is_anomaly: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    anomaly_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     tariffs: Mapped[list["PriceTariff"]] = relationship(
         back_populates="item", cascade="all, delete-orphan"

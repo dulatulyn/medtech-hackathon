@@ -12,7 +12,10 @@ from src.repositories.price_repository import PriceRepository
 from src.services.auth_service import AuthService
 from src.services.catalog_service import CatalogService
 from src.services.import_service import ImportService
+from src.services.normalization_service import NormalizationService
 from src.services.parse_service import ParseService
+from src.services.validation_service import ValidationService
+
 
 class ServiceProvider(Provider):
     """Provider for service dependencies."""
@@ -46,3 +49,15 @@ class ServiceProvider(Provider):
     ) -> ParseService:
         """Provide ParseService for the current request."""
         return ParseService(price_repository, storage)
+
+    @provide(scope=Scope.REQUEST)
+    def get_normalization_service(
+        self, catalog_repository: CatalogRepository, price_repository: PriceRepository
+    ) -> NormalizationService:
+        """Provide NormalizationService for the current request."""
+        return NormalizationService(catalog_repository, price_repository)
+
+    @provide(scope=Scope.REQUEST)
+    def get_validation_service(self, price_repository: PriceRepository) -> ValidationService:
+        """Provide ValidationService for the current request."""
+        return ValidationService(price_repository)

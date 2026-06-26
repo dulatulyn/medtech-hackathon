@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from src.api.middlewares.response_middleware import StandardResponseMiddleware
 from src.api.v1.admin import router as admin_router
 from src.api.v1.auth import router as auth_router
+from src.api.v1.catalog_router import router as catalog_router
+from src.api.v1.partners_router import router as partners_router
+from src.api.v1.services_router import router as services_router
 from src.api.exceptions.exception_handlers import register_exception_handlers
 from src.core.config import config, Config
 from src.core.logging import get_logger, setup_logging
@@ -60,7 +63,7 @@ def create_app(container=None) -> FastAPI:
 
     app = FastAPI(
         title=config.app_name,
-        description="FastAPI application with structured logging and monitoring",
+        description="MedArchive ETL — clinic price list normalization and search",
         version="0.1.0",
         lifespan=lifespan,
     )
@@ -109,3 +112,6 @@ async def readiness_check(engine: FromDishka[AsyncEngine]):
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/v1", tags=["Authentication"])
 app.include_router(admin_router, prefix="/api/v1", tags=["Admin"])
+app.include_router(services_router, prefix="/api/v1", tags=["Services"])
+app.include_router(partners_router, prefix="/api/v1", tags=["Partners"])
+app.include_router(catalog_router, prefix="/api/v1", tags=["Catalog"])

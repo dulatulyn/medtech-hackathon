@@ -31,3 +31,21 @@ class PartnerRepository:
     async def get_by_bin(self, bin: str) -> Partner | None:
         """Return a partner by BIN, used for deduplication."""
         return await self.session.scalar(select(Partner).where(Partner.bin == bin))
+
+    async def list_all(self, city: str | None = None, is_active: bool | None = None) -> list[Partner]:
+        """Return all partners, optionally filtered by city or active status."""
+        stmt = select(Partner)
+        if city:
+            stmt = stmt.where(Partner.city == city)
+        if is_active is not None:
+            stmt = stmt.where(Partner.is_active.is_(is_active))
+        stmt = stmt.order_by(Partner.name)
+        result = await self.session.scalars(stmt)
+        return list(result)
+
+    async def count_active(self) -> int:
+        """Return count of active partners."""
+        from sqlalchemy import func
+        return await self.session.scalar(
+            select(func.count()).select_from(Partner).where(Partner.is_active.is_(True))
+        ) or 0
