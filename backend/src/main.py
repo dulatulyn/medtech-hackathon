@@ -79,39 +79,45 @@ def create_app(container=None) -> FastAPI:
     app.add_middleware(StandardResponseMiddleware)
 
     register_exception_handlers(app)
+    _register_routes(app)
 
     return app
 
+
+def _register_routes(app: FastAPI) -> None:
+    """Attach health checks and all v1 routers (used by the factory + tests)."""
+
+    @app.get("/health", tags=["Health"])
+    async def health_check():
+        """Basic liveness check endpoint."""
+        return {"status": "healthy", "service": config.app_name}
+
+    health_router = APIRouter(route_class=DishkaRoute, tags=["Health"])
+
+    @health_router.get("/health/ready")
+    async def readiness_check(engine: FromDishka[AsyncEngine]):
+        """Readiness check endpoint with database connectivity verification."""
+        is_db_connected = await check_db_connection(engine)
+
+        if not is_db_connected:
+            logger.error("readiness_check_failed_database_unreachable")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database connection failed",
+            )
+
+        return {
+            "status": "ready",
+            "service": config.app_name,
+            "database": "connected",
+        }
+
+    app.include_router(health_router)
+    app.include_router(auth_router, prefix="/api/v1", tags=["Authentication"])
+    app.include_router(admin_router, prefix="/api/v1", tags=["Admin"])
+    app.include_router(services_router, prefix="/api/v1", tags=["Services"])
+    app.include_router(partners_router, prefix="/api/v1", tags=["Partners"])
+    app.include_router(catalog_router, prefix="/api/v1", tags=["Catalog"])
+
+
 app = create_app()
-
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """Basic liveness check endpoint."""
-    return {"status": "healthy", "service": config.app_name}
-
-health_router = APIRouter(route_class=DishkaRoute, tags=["Health"])
-
-@health_router.get("/health/ready")
-async def readiness_check(engine: FromDishka[AsyncEngine]):
-    """Readiness check endpoint with database connectivity verification."""
-    is_db_connected = await check_db_connection(engine)
-
-    if not is_db_connected:
-        logger.error("readiness_check_failed_database_unreachable")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database connection failed"
-        )
-
-    return {
-        "status": "ready",
-        "service": config.app_name,
-        "database": "connected"
-    }
-
-app.include_router(health_router)
-app.include_router(auth_router, prefix="/api/v1", tags=["Authentication"])
-app.include_router(admin_router, prefix="/api/v1", tags=["Admin"])
-app.include_router(services_router, prefix="/api/v1", tags=["Services"])
-app.include_router(partners_router, prefix="/api/v1", tags=["Partners"])
-app.include_router(catalog_router, prefix="/api/v1", tags=["Catalog"])
