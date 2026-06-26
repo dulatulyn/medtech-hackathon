@@ -10,7 +10,7 @@ import openpyxl
 
 from src.enums import FileFormat
 from src.parsers.base import ParseResult, RawRow, row_to_rawrow
-from src.parsers.columns import find_header_row, map_columns
+from src.parsers.columns import map_columns, resolve_header
 
 
 def _xls_to_xlsx(data: bytes) -> bytes:
@@ -38,12 +38,12 @@ def parse_excel(data: bytes, file_format: FileFormat) -> ParseResult:
         grid = [list(r) for r in workbook[sheet_name].iter_rows(values_only=True)]
         if not grid:
             continue
-        header_idx = find_header_row(grid)
-        cmap = map_columns(grid[header_idx])
+        header, data_start = resolve_header(grid)
+        cmap = map_columns(header)
         if not cmap.is_usable():
             warnings.append(f"sheet '{sheet_name}': no usable header")
             continue
-        for row_idx in range(header_idx + 1, len(grid)):
+        for row_idx in range(data_start, len(grid)):
             row = row_to_rawrow(grid[row_idx], cmap, {"sheet": sheet_name, "row": row_idx + 1})
             if row:
                 rows.append(row)

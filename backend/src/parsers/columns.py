@@ -9,6 +9,10 @@ _HEADER_HINTS = (
     "наимен", "услуг", "цена", "стоим", "тариф", "код", "ед.", "ед ",
     "измер", "единиц", "тенге", "прайс",
 )
+_PRICE_HINTS = ("цена", "стоим", "тариф", "тенге", "price")
+# Tariff-tier phrases that mark a price column even without the word "цена".
+_TARIFF_HINTS = ("граждан", "резидент", "нерезидент", "страхов", "снг",
+                 "дальн", "оралман", "кандас", "партн", "ближн")
 
 
 def _norm(value) -> str:
@@ -70,9 +74,31 @@ def map_columns(header: list) -> ColumnMap:
         if cmap.unit is None and ("ед." in text or "ед " in text or "измер" in text or "единиц" in text):
             cmap.unit = index
             continue
-        if any(k in text for k in ("цена", "стоим", "тариф", "тенге", "price")):
+        if any(k in text for k in _PRICE_HINTS) or any(k in text for k in _TARIFF_HINTS):
             cmap.prices.append((index, classify_tariff(text)))
     return cmap
+
+
+def _merge_header_rows(top: list, bottom: list) -> list:
+    """Concatenate two header rows cell-by-cell (for split/stacked headers)."""
+    width = max(len(top), len(bottom))
+    merged = []
+    for index in range(width):
+        a = _norm(top[index]) if index < len(top) else ""
+        b = _norm(bottom[index]) if index < len(bottom) else ""
+        merged.append((a + " " + b).strip())
+    return merged
+
+
+def resolve_header(rows: list[list], max_scan: int = 40) -> tuple[list, int]:
+    """Return (header_cells, data_start_index), merging a second row if price labels sit below."""
+    idx = find_header_row(rows, max_scan)
+    base = list(rows[idx]) if idx < len(rows) else []
+    if not map_columns(base).prices and idx + 1 < len(rows):
+        merged = _merge_header_rows(base, rows[idx + 1])
+        if map_columns(merged).prices:
+            return merged, idx + 2
+    return base, idx + 1
 
 
 def find_header_row(rows: list[list], max_scan: int = 30) -> int:
