@@ -161,12 +161,19 @@ def handle_service_errors(func: Callable) -> Callable:
 
         except ValueError as e:
             error_message = str(e)
-
             error_lower = error_message.lower()
+
+            if "not found" in error_lower:
+                logger.warning("route_not_found", error=error_message, route=func.__name__)
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=error_message,
+                )
+
             if "validation error" in error_lower or "pydantic" in error_lower:
                 sanitized_message = VALIDATION_ERROR_MSG
             else:
-                sanitized_message = INVALID_REQUEST_MSG
+                sanitized_message = error_message or INVALID_REQUEST_MSG
 
             logger.warning(
                 "route_value_error",

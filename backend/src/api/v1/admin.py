@@ -95,6 +95,20 @@ async def parse_all_pending(service: FromDishka[ParseService]):
     return {"processed": len(counts), "results": counts}
 
 
+@router.post("/normalize-all")
+@handle_service_errors
+async def normalize_all(service: FromDishka[NormalizationService]):
+    """Normalize all unmatched items across all parsed documents."""
+    results = await service.normalize_pending()
+    total_matched = sum(r.matched for r in results.values())
+    total_unmatched = sum(r.unmatched for r in results.values())
+    return {
+        "docs_processed": len(results),
+        "total_matched": total_matched,
+        "total_unmatched": total_unmatched,
+    }
+
+
 @router.post("/pipeline/{doc_id}")
 @handle_service_errors
 async def run_pipeline(

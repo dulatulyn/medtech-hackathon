@@ -42,5 +42,14 @@ class NormalizationService:
         )
 
     async def normalize_pending(self) -> dict[str, NormalizationResultDTO]:
-        """Normalize all documents with done parse status."""
-        return {}
+        """Normalize all unmatched items across all parsed documents."""
+        from src.enums import ParseStatus
+        results: dict[str, NormalizationResultDTO] = {}
+        docs = await self.prices.list_documents()
+        for doc in docs:
+            if doc.parse_status not in (ParseStatus.done, ParseStatus.needs_review):
+                continue
+            result = await self.normalize_document(doc.id)
+            results[doc.id] = result
+            logger.info("document_normalized", doc_id=doc.id, matched=result.matched, unmatched=result.unmatched)
+        return results
