@@ -1,0 +1,271 @@
+"""Authentication service layer for business logic."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Optional
+
+from src.core.logging import get_logger
+from src.core.security import hash_password, verify_password, create_access_token, generate_refresh_token
+from src.core.config import Config
+from src.dtos import UserRegisterDTO, UserLoginDTO, TokenDTO
+from src.repositories.auth_repository import AuthRepository
+
+logger = get_logger(__name__)
+
+class AuthService:
+    """Service for managing authentication-related business logic."""
+
+    def __init__(self, auth_repository: AuthRepository, config: Config):
+        self.auth_repository = auth_repository
+        self.config = config
+
+    async def register_user(
+        self,
+        user_data: UserRegisterDTO,
+        user_agent: Optional[str] = None,
+        ip_address: Optional[str] = None
+    ) -> TokenDTO:
+        """Register a new user and return authentication tokens."""
+        logger.info(
+            "registering_user",
+            username=user_data.username,
+            email=user_data.email
+        )
+
+        existing_user = await self.auth_repository.get_user_by_username(user_data.username)
+        if existing_user:
+            logger.warning(
+                "registration_failed_username_exists",
+                username=user_data.username
+            )
+            raise ValueError("Username already exists")
+
+        existing_email = await self.auth_repository.get_user_by_email(user_data.email)
+        if existing_email:
+            logger.warning(
+                "registration_failed_email_exists",
+                email=user_data.email
+            )
+            raise ValueError("Email already exists")
+
+        try:
+
+            hashed_password = hash_password(user_data.password)
+
+            user = await self.auth_repository.create_user(
+                username=user_data.username,
+                email=user_data.email,
+                hashed_password=hashed_password
+            )
+
+            access_token = create_access_token(
+                data={"sub": str(user.id), "username": user.username},
+                config=self.config
+            )
+            refresh_token = generate_refresh_token()
+
+            await self.auth_repository.create_refresh_token(
+                user_id=user.id,
+                token=refresh_token,
+                expires_days=self.config.refresh_token_expire_days,
+                user_agent=user_agent,
+                ip_address=ip_address
+            )
+
+            logger.info(
+                "user_registered_successfully",
+                user_id=user.id,
+                username=user.username,
+                email=user.email
+            )
+
+            return TokenDTO(
+                access_token=access_token,
+                refresh_token=refresh_token
+            )
+
+        except Exception as e:
+            logger.error(
+                "user_registration_failed",
+                username=user_data.username,
+                email=user_data.email,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True
+            )
+            raise
+
+    async def login_user(
+        self,
+        login_data: UserLoginDTO,
+        user_agent: Optional[str] = None,
+        ip_address: Optional[str] = None
+    ) -> TokenDTO:
+        """Authenticate a user and return authentication tokens."""
+        logger.info(
+            "login_attempt",
+            username=login_data.username,
+            ip_address=ip_address
+        )
+
+        user = await self.auth_repository.get_user_by_username(login_data.username)
+
+        if not user:
+            logger.warning(
+                "login_failed_user_not_found",
+                username=login_data.username,
+                ip_address=ip_address
+            )
+            raise ValueError("Invalid username or password")
+
+        if not verify_password(login_data.password, user.hashed_password):
+            logger.warning(
+                "login_failed_invalid_password",
+                username=login_data.username,
+                user_id=user.id,
+                ip_address=ip_address
+            )
+            raise ValueError("Invalid username or password")
+
+        if not user.is_active:
+            logger.warning(
+                "login_failed_user_inactive",
+                username=login_data.username,
+                user_id=user.id,
+                ip_address=ip_address
+            )
+            raise ValueError("Account is inactive")
+
+        try:
+
+            access_token = create_access_token(
+                data={"sub": str(user.id), "username": user.username},
+                config=self.config
+            )
+            refresh_token = generate_refresh_token()
+
+            await self.auth_repository.create_refresh_token(
+                user_id=user.id,
+                token=refresh_token,
+                expires_days=self.config.refresh_token_expire_days,
+                user_agent=user_agent,
+                ip_address=ip_address
+            )
+
+            logger.info(
+                "login_successful",
+                user_id=user.id,
+                username=user.username,
+                ip_address=ip_address
+            )
+
+            return TokenDTO(
+                access_token=access_token,
+                refresh_token=refresh_token
+            )
+
+        except Exception as e:
+            logger.error(
+                "login_failed",
+                username=login_data.username,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True
+            )
+            raise
+
+    async def refresh_token(
+        self,
+        refresh_token: str,
+        user_agent: Optional[str] = None,
+        ip_address: Optional[str] = None
+    ) -> TokenDTO:
+        """Refresh access token using a refresh token."""
+        logger.info(
+            "refresh_token_attempt",
+            ip_address=ip_address
+        )
+
+        token_record = await self.auth_repository.get_refresh_token(refresh_token)
+
+        if not token_record:
+            logger.warning(
+                "refresh_token_not_found",
+                ip_address=ip_address
+            )
+            raise ValueError("Invalid refresh token")
+
+        if token_record.is_revoked:
+            logger.warning(
+                "refresh_token_revoked",
+                user_id=token_record.user_id,
+                ip_address=ip_address
+            )
+            raise ValueError("Refresh token has been revoked")
+
+        if token_record.expires_at < datetime.now(timezone.utc):
+            logger.warning(
+                "refresh_token_expired",
+                user_id=token_record.user_id,
+                expires_at=token_record.expires_at,
+                ip_address=ip_address
+            )
+            raise ValueError("Refresh token has expired")
+
+        user = await self.auth_repository.get_user_by_id(token_record.user_id)
+        if not user:
+            logger.error(
+                "refresh_token_user_not_found",
+                user_id=token_record.user_id,
+                ip_address=ip_address
+            )
+            raise ValueError("User not found")
+
+        if not user.is_active:
+            logger.warning(
+                "refresh_token_user_inactive",
+                user_id=user.id,
+                ip_address=ip_address
+            )
+            raise ValueError("Account is inactive")
+
+        try:
+
+            access_token = create_access_token(
+                data={"sub": str(user.id), "username": user.username},
+                config=self.config
+            )
+            new_refresh_token = generate_refresh_token()
+
+            await self.auth_repository.revoke_refresh_token(refresh_token)
+
+            await self.auth_repository.create_refresh_token(
+                user_id=user.id,
+                token=new_refresh_token,
+                expires_days=self.config.refresh_token_expire_days,
+                user_agent=user_agent,
+                ip_address=ip_address
+            )
+
+            logger.info(
+                "refresh_token_successful",
+                user_id=user.id,
+                username=user.username,
+                ip_address=ip_address
+            )
+
+            return TokenDTO(
+                access_token=access_token,
+                refresh_token=new_refresh_token
+            )
+
+        except Exception as e:
+            logger.error(
+                "refresh_token_failed",
+                user_id=token_record.user_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True
+            )
+            raise
