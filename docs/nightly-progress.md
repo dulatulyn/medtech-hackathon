@@ -112,12 +112,23 @@
 
 ---
 
-## Frontend integration (this session)
-- Frontend dev pushed React UI (`frontend/`, commit `6f72b63`) — pages: Landing, Dashboard,
-  Catalog, Service, Clinic, Search, Verify, Match, Anomalies, Documents, Upload.
-- Currently runs on mock data (`src/data.js`); no API calls yet. Owned by frontend dev — not modified.
-- **Backend is integration-ready**: CORS `*` + credentials; `{data: ...}` envelope.
-- Wrote `docs/api-contract.md` — full endpoint → `data.js` mapping for the frontend dev to wire.
+## Frontend integration (this session) — LIVE
+- Frontend dev pushed React UI (`frontend/`, commit `6f72b63`). Now wired to the backend.
+- `frontend/vite.config.js`: proxy `/api → :8010` (`VITE_API_TARGET` override).
+- `frontend/src/api.js`: fetch client, unwraps `{data}`, maps backend → page shapes.
+- Wired pages (live data + mock fallback so UI never breaks):
+  - **Dashboard** → `/admin/stats` + `/admin/documents`
+  - **Catalog** → `/services` + `/services/{id}/price-compare` (partners/min/max)
+  - **Search** → `/search` (debounced) + comparison stats
+  - **Documents** → `/admin/documents`
+  - **Match** → `/unmatched` + live candidate search + `POST /match` (self-learning + twin re-match)
+- `src/seed.py` + `python -m src.cli seed`: demo data (8 clinics, 8 services, 52 matched items,
+  6 anomalies, 4 unmatched) so every read endpoint returns content.
+- **Verified end-to-end**: vite :4321 → proxy → backend :8010 → pgvector Postgres. `POST /match`
+  confirmed to create a service and add an operator synonym (`synonyms_added=1`) through the proxy.
+- Run guide: README → "Демо: связанный стек". Contract: `docs/api-contract.md`.
+- Not yet wired (mock still): Anomalies, Verify, Service/Clinic detail, Upload — straightforward
+  next steps using the same `api.js` pattern (backend endpoints already exist).
 
 ---
 

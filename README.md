@@ -34,10 +34,34 @@ API-доки: `http://localhost:8000/docs`. Подробнее — `backend/READ
 
 ```bash
 cd frontend
-# первый раз: npm create vite@latest .   (React + TS)
 npm install
-npm run dev
+npm run dev          # http://localhost:4321
 ```
+
+UI ходит в API через прокси `/api → backend` (см. `vite.config.js`). По умолчанию
+бэкенд ожидается на `:8010`; переопределить — `VITE_API_TARGET=http://host:port npm run dev`.
+Все страницы тянут живые данные из API с фолбэком на мок (`src/data.js`), если бэкенд недоступен.
+
+## Демо: связанный стек (back + front)
+
+```bash
+# 1. БД с расширениями pg_trgm + pgvector (нужен pgvector-образ, не обычный postgres)
+docker run -d --name medtech_db -e POSTGRES_USER=med -e POSTGRES_PASSWORD=med \
+  -e POSTGRES_DB=medarchive -p 5544:5432 pgvector/pgvector:pg16
+
+# 2. Бэкенд: миграции + демо-данные + сервер на :8010
+cd backend
+export DB_HOST=localhost DB_PORT=5544 DB_USER=med DB_PASSWORD=med DB_NAME=medarchive SECRET_KEY=devsecret
+uv run alembic upgrade head
+uv run python -m src.cli seed          # 8 клиник, 8 услуг, прайсы, аномалии
+uv run uvicorn src.main:app --port 8010
+
+# 3. Фронтенд на :4321 (проксирует /api → :8010)
+cd ../frontend && npm install && npm run dev
+```
+
+Открыть `http://localhost:4321` → Дашборд/Каталог/Поиск/Документы/Несопоставленное
+показывают живые данные. Контракт API — `docs/api-contract.md`.
 
 Подробнее — `frontend/README.md`.
 
