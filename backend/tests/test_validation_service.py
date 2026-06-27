@@ -19,12 +19,13 @@ def _make_tariff(tariff_type=TariffType.default, amount=Decimal("1000")):
     return t
 
 
-def _make_item(item_id="i1", partner_id="p1", service_id="s1", tariffs=None):
+def _make_item(item_id="i1", partner_id="p1", service_id="s1", tariffs=None, effective_date=None):
     item = MagicMock()
     item.id = item_id
     item.partner_id = partner_id
     item.service_id = service_id
     item.tariffs = tariffs or [_make_tariff()]
+    item.effective_date = effective_date
     return item
 
 
@@ -98,6 +99,39 @@ async def test_validate_no_anomaly_small_change():
 
     assert result.anomalies == 0
     price_repo.set_anomaly.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_validate_warns_nonresident_below_resident():
+    """ТЗ 4.4: non-resident tariff below resident tariff is flagged."""
+    item = _make_item(tariffs=[
+        _make_tariff(TariffType.resident, Decimal("5000")),
+        _make_tariff(TariffType.far_abroad, Decimal("4000")),
+    ])
+    price_repo = AsyncMock()
+    price_repo.list_items_for_doc.return_value = [item]
+    price_repo.list_active_items_for_partner_service.return_value = [item]
+
+    svc = ValidationService(price_repo)
+    result = await svc.validate_document("doc1")
+
+    assert any("far_abroad" in w and "resident" in w for w in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_validate_warns_future_effective_date():
+    """ТЗ 4.4: a future effective_date is flagged."""
+    from datetime import date, timedelta
+
+    item = _make_item(effective_date=date.today() + timedelta(days=365))
+    price_repo = AsyncMock()
+    price_repo.list_items_for_doc.return_value = [item]
+    price_repo.list_active_items_for_partner_service.return_value = [item]
+
+    svc = ValidationService(price_repo)
+    result = await svc.validate_document("doc1")
+
+    assert any("future effective_date" in w for w in result.warnings)
 
 
 @pytest.mark.asyncio

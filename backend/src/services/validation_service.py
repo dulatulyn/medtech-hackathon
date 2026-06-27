@@ -1,11 +1,17 @@
 """Validation service: price checks, versioning, and anomaly detection."""
 from __future__ import annotations
 
+from datetime import date
+
 from src.core.logging import get_logger
 from src.dtos.validation_dto import ValidationResultDTO
+from src.enums import TariffType
 from src.repositories.price_repository import PriceRepository
 
 logger = get_logger(__name__)
+
+# Tariff tiers that represent a non-resident (typically higher) price.
+_NONRESIDENT_TIERS = (TariffType.cis, TariffType.far_abroad)
 
 
 class ValidationService:
@@ -32,6 +38,21 @@ class ValidationService:
                 if tariff.amount <= 0:
                     warnings.append(f"item {item.id}: {tariff.tariff_type} amount ≤ 0")
                     errors += 1
+
+            # ТЗ 4.4: non-resident price should be >= resident price
+            amounts = {t.tariff_type: t.amount for t in item.tariffs}
+            resident = amounts.get(TariffType.resident)
+            if resident is not None:
+                for tier in _NONRESIDENT_TIERS:
+                    nonres = amounts.get(tier)
+                    if nonres is not None and nonres < resident:
+                        warnings.append(
+                            f"item {item.id}: {tier.value} {nonres} < resident {resident}"
+                        )
+
+            # ТЗ 4.4: effective date in the future is suspicious
+            if item.effective_date and item.effective_date > date.today():
+                warnings.append(f"item {item.id}: future effective_date {item.effective_date}")
 
             # Get previously active items for the same partner + service
             prev_items = await self.prices.list_active_items_for_partner_service(
