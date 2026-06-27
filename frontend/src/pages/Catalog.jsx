@@ -1,12 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { catalog } from '../data.js'
+import { listCatalog } from '../api.js'
 
 const cats = ['Все', 'Лаборатория', 'Диагностика', 'Консультация']
 
 export default function Catalog() {
   const [c, setC] = useState(0)
-  const shown = c === 0 ? catalog : catalog.filter(s => s.cat === cats[c])
+  const [rows, setRows] = useState(catalog)
+  useEffect(() => {
+    listCatalog().then(r => { if (r.length) setRows(r) }).catch(() => {})
+  }, [])
+  const shown = c === 0 ? rows : rows.filter(s => s.cat === cats[c])
   return (
     <>
       <div className="page-head">
@@ -15,7 +20,7 @@ export default function Catalog() {
           <h1>Справочник услуг</h1>
           <p>Эталонный каталог: к этим записям нормализуются все услуги из прайсов клиник.</p>
         </div>
-        <div className="actions"><span className="badge badge--accent">{catalog.length} услуг</span></div>
+        <div className="actions"><span className="badge badge--accent">{rows.length} услуг</span></div>
       </div>
 
       <div className="toolbar">

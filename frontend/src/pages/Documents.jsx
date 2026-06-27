@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { documents, statusLabel } from '../data.js'
+import { listDocuments } from '../api.js'
 
 const chips = ['Все · 10', 'Готово · 7', 'На ревью · 1', 'Обработка · 1', 'В очереди · 1']
 
@@ -13,6 +14,10 @@ const detailRows = [
 
 export default function Documents() {
   const [active, setActive] = useState(0)
+  const [docs, setDocs] = useState(documents)
+  useEffect(() => {
+    listDocuments().then(d => { if (d.length) setDocs(d) }).catch(() => {})
+  }, [])
   return (
     <>
       <div className="page-head">
@@ -35,10 +40,10 @@ export default function Documents() {
           <table className="table">
             <thead><tr><th>Файл</th><th>Клиника</th><th>Формат</th><th>Дата прайса</th><th>Статус</th><th className="num">Позиций</th></tr></thead>
             <tbody>
-              {documents.map(d => {
+              {docs.map(d => {
                 const m = statusLabel[d.status]
                 return (
-                  <tr key={d.file}>
+                  <tr key={d.id || d.file}>
                     <td className="t-main">{d.file}</td>
                     <td>{d.clinic} · {d.city}</td>
                     <td><span className="tag">{d.format}</span></td>

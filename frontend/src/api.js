@@ -1,0 +1,134 @@
+// Thin API client for the MedArchive backend.
+// Calls go through the Vite proxy (/api -> backend); unwraps the {data:...} envelope.
+// Every function returns page-ready shapes and is safe to call from useEffect.
+
+const BASE = import.meta.env.VITE_API_URL || '/api/v1'
+
+async function get(path) {
+  const r = await fetch(`${BASE}${path}`, { headers: { Accept: 'application/json' } })
+  if (!r.ok) throw new Error(`${r.status} ${path}`)
+  const body = await r.json()
+  return body && 'data' in body ? body.data : body
+}
+
+async function post(path, payload) {
+  const r = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!r.ok) throw new Error(`${r.status} ${path}`)
+  const body = await r.json()
+  return body && 'data' in body ? body.data : body
+}
+
+// ---- mapping helpers -------------------------------------------------------
+
+const STATUS = { done: 'ok', needs_review: 'warn', processing: 'info', pending: 'pend', error: 'err' }
+const FORMAT = { xlsx: 'XLSX', xls: 'XLS', pdf: 'PDF', scan_pdf: 'Скан', docx: 'DOCX' }
+
+const fmt = (n) => (n == null ? '—' : Math.round(n).toLocaleString('ru-RU').replace(/,/g, ' '))
+const tariff = (tariffs, type) => tariffs?.find((t) => t.tariff_type === type)?.amount ?? null
+const resident = (tariffs) => tariff(tariffs, 'resident') ?? tariffs?.[0]?.amount ?? null
+const nonresident = (tariffs) => tariff(tariffs, 'far_abroad') ?? tariff(tariffs, 'cis') ?? null
+
+let _partnerCache = null
+async function partnerMap() {
+  if (_partnerCache) return _partnerCache
+  const d = await get('/partners?limit=500')
+  _partnerCache = new Map((d.items || []).map((p) => [p.id, p]))
+  return _partnerCache
+}
+
+// ---- public API ------------------------------------------------------------
+
+export async function getStats() {
+  return get('/admin/stats')
+}
+
+export async function listDocuments() {
+  const d = await get('/admin/documents')
+  const pmap = await partnerMap()
+  return (d.documents || []).map((x) => {
+    const p = pmap.get(x.partner_id)
+    return {
+      id: x.id,
+      file: x.file_name,
+      clinic: p?.name || '—',
+      city: p?.city || '',
+      format: FORMAT[x.file_format] || x.file_format,
+      date: x.effective_date || '—',
+      status: STATUS[x.parse_status] || 'info',
+      parse_log: x.parse_log,
+    }
+  })
+}
+
+export async function listCatalog() {
+  const d = await get('/services?limit=200')
+  const services = d.items || []
+  const enriched = await Promise.all(
+    services.map(async (s) => {
+      let partners = 0
+      let min = null
+      let max = null
+      try {
+        const rows = await get(`/services/${s.id}/price-compare`)
+        partners = rows.length
+        const vals = rows.map((r) => r.tariffs?.resident ?? Object.values(r.tariffs || {})[0]).filter((v) => v != null)
+        if (vals.length) {
+          min = Math.min(...vals)
+          max = Math.max(...vals)
+        }
+      } catch {
+        /* leave zeros */
+      }
+      return { id: s.id, name: s.name, cat: s.category || '—', syn: '', partners, min: fmt(min), max: fmt(max) }
+    })
+  )
+  return enriched
+}
+
+export async function search(q) {
+  const d = await get(`/search?q=${encodeURIComponent(q)}&limit=50`)
+  const pmap = await partnerMap()
+  const rows = (d.items || []).map((it) => {
+    const p = pmap.get(it.partner_id)
+    return {
+      clinic: p?.name || '—',
+      city: p?.city || '',
+      res: fmt(resident(it.tariffs)),
+      nonres: fmt(nonresident(it.tariffs)),
+      resNum: resident(it.tariffs),
+      flag: it.is_anomaly,
+      raw: it.service_name_raw,
+    }
+  })
+  const nums = rows.map((r) => r.resNum).filter((v) => v != null).sort((a, b) => a - b)
+  if (nums.length) {
+    const best = nums[0]
+    rows.forEach((r) => { r.best = r.resNum === best })
+  }
+  const median = nums.length ? nums[Math.floor(nums.length / 2)] : null
+  return { query: d.query, rows, stats: { best: fmt(nums[0]), median: fmt(median), max: fmt(nums[nums.length - 1]) } }
+}
+
+export async function listUnmatched() {
+  const d = await get('/unmatched?limit=200')
+  const pmap = await partnerMap()
+  return (d.items || []).map((it) => ({
+    id: it.item_id,
+    raw: it.service_name_raw,
+    clinic: pmap.get(it.partner_id)?.name || '—',
+    res: fmt(resident(it.tariffs)),
+  }))
+}
+
+export async function listServices() {
+  const d = await get('/services?limit=200')
+  return d.items || []
+}
+
+export async function matchItem(payload) {
+  return post('/match', payload)
+}

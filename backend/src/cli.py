@@ -115,6 +115,18 @@ async def _load_dict(path: str) -> None:
     print(f"loaded {count} services from {path}")
 
 
+async def _seed() -> None:
+    """Insert demo data (clinics, services, matched items, anomalies)."""
+    from src.seed import seed_demo
+
+    engine = create_async_engine(config.db_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        counts = await seed_demo(session)
+    await engine.dispose()
+    print("seeded:", ", ".join(f"{k}={v}" for k, v in counts.items()))
+
+
 def main() -> None:
     """Parse arguments and dispatch a subcommand."""
     parser = argparse.ArgumentParser(prog="python -m src.cli")
@@ -136,6 +148,8 @@ def main() -> None:
     val = sub.add_parser("validate-doc", help="validate a document (history + anomalies)")
     val.add_argument("doc_id")
 
+    sub.add_parser("seed", help="insert demo data (clinics, services, items)")
+
     args = parser.parse_args()
     if args.command == "load-dict":
         asyncio.run(_load_dict(args.path))
@@ -149,6 +163,8 @@ def main() -> None:
         asyncio.run(_normalize_doc(args.doc_id))
     elif args.command == "validate-doc":
         asyncio.run(_validate_doc(args.doc_id))
+    elif args.command == "seed":
+        asyncio.run(_seed())
 
 
 if __name__ == "__main__":
