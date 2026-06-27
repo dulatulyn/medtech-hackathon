@@ -39,11 +39,11 @@ async def list_documents(service: FromDishka[ImportService]):
                 "id": d.id,
                 "partner_id": d.partner_id,
                 "file_name": d.file_name,
-                "file_format": d.file_format.value,
-                "parse_status": d.parse_status.value,
+                "file_format": d.file_format,
+                "parse_status": d.parse_status,
                 "effective_date": str(d.effective_date) if d.effective_date else None,
                 "parse_log": d.parse_log,
-                "created_at": str(d.created_at),
+                "created_at": str(d.created_at) if d.created_at else None,
             }
             for d in docs
         ]

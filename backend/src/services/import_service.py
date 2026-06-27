@@ -95,6 +95,8 @@ class ImportService:
                 file_format=d.file_format.value,
                 parse_status=d.parse_status.value,
                 effective_date=d.effective_date,
+                parse_log=d.parse_log,
+                created_at=d.created_at,
             )
             for d in docs
         ]
