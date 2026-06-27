@@ -78,11 +78,23 @@ class ParseService:
             doc.parse_log = f"ocr_unavailable: {type(exc).__name__}"
             logger.info("ocr_unavailable", doc_id=doc.id, error=str(exc))
             return result
-        if text.strip():
-            doc.parse_log = "ocr_text_extracted: table reconstruction pending manual review"
-            logger.info("ocr_text_extracted", doc_id=doc.id, chars=len(text))
-        else:
+        except Exception as exc:  # noqa: BLE001 - OCR backend failure is non-fatal
+            doc.parse_log = f"ocr_error: {type(exc).__name__}: {exc}"
+            logger.warning("ocr_error", doc_id=doc.id, error=str(exc))
+            return result
+
+        if not text.strip():
             doc.parse_log = "ocr_empty: provider returned no text"
+            return result
+
+        from src.parsers.ocr_text import parse_ocr_text
+
+        ocr_result = parse_ocr_text(text)
+        if ocr_result.rows:
+            logger.info("ocr_rows_extracted", doc_id=doc.id, rows=len(ocr_result.rows))
+            return ocr_result
+        doc.parse_log = "ocr_text_extracted: no price rows reconstructed"
+        logger.info("ocr_text_no_rows", doc_id=doc.id, chars=len(text))
         return result
 
     async def parse_pending(self) -> dict[str, int]:
