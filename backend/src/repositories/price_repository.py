@@ -152,6 +152,15 @@ class PriceRepository:
         )
         return list(result)
 
+    async def list_all_active_items(self) -> list[PriceItem]:
+        """Return every active price item with tariffs (for full-text reindexing)."""
+        result = await self.session.scalars(
+            select(PriceItem)
+            .options(selectinload(PriceItem.tariffs))
+            .where(PriceItem.is_active.is_(True))
+        )
+        return list(result)
+
     async def list_anomalies(self, limit: int = 200) -> list[PriceItem]:
         """Return active items flagged as anomalies, with tariffs."""
         result = await self.session.scalars(

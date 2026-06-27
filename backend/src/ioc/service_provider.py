@@ -5,6 +5,7 @@ from dishka import Provider, Scope, provide
 from src.core.config import Config
 from src.integrations.ocr import OcrProvider
 from src.integrations.queue import TaskQueue
+from src.integrations.search_index import MeiliIndex
 from src.integrations.storage import ObjectStorage
 from src.repositories.auth_repository import AuthRepository
 from src.repositories.catalog_repository import CatalogRepository
@@ -15,6 +16,7 @@ from src.services.catalog_service import CatalogService
 from src.services.import_service import ImportService
 from src.services.normalization_service import NormalizationService
 from src.services.parse_service import ParseService
+from src.services.search_service import SearchService
 from src.services.validation_service import ValidationService
 
 
@@ -62,3 +64,14 @@ class ServiceProvider(Provider):
     def get_validation_service(self, price_repository: PriceRepository) -> ValidationService:
         """Provide ValidationService for the current request."""
         return ValidationService(price_repository)
+
+    @provide(scope=Scope.REQUEST)
+    def get_search_service(
+        self,
+        meili: MeiliIndex,
+        price_repository: PriceRepository,
+        partner_repository: PartnerRepository,
+        catalog_repository: CatalogRepository,
+    ) -> SearchService:
+        """Provide the Meilisearch-backed SearchService for the current request."""
+        return SearchService(meili, price_repository, partner_repository, catalog_repository)

@@ -90,27 +90,47 @@ export async function listCatalog() {
 }
 
 export async function search(q) {
-  const d = await get(`/search?q=${encodeURIComponent(q)}&limit=50`)
-  const pmap = await partnerMap()
-  const rows = (d.items || []).map((it) => {
-    const p = pmap.get(it.partner_id)
-    return {
-      clinic: p?.name || '—',
-      city: p?.city || '',
-      res: fmt(resident(it.tariffs)),
-      nonres: fmt(nonresident(it.tariffs)),
-      resNum: resident(it.tariffs),
-      flag: it.is_anomaly,
-      raw: it.service_name_raw,
-    }
-  })
+  let rows
+  // Prefer Meilisearch full-text (typo-tolerant); fall back to pg_trgm.
+  try {
+    const m = await get(`/search/full?q=${encodeURIComponent(q)}&limit=50`)
+    rows = (m.items || []).map((h) => ({
+      clinic: h.partner_name || '—',
+      city: h.city || '',
+      res: fmt(h.resident_price),
+      nonres: fmt(h.nonresident_price),
+      resNum: h.resident_price,
+      flag: h.is_anomaly,
+      raw: h.service_name_raw,
+      engine: 'meilisearch',
+    }))
+  } catch {
+    rows = null
+  }
+  if (!rows) {
+    const d = await get(`/search?q=${encodeURIComponent(q)}&limit=50`)
+    const pmap = await partnerMap()
+    rows = (d.items || []).map((it) => {
+      const p = pmap.get(it.partner_id)
+      return {
+        clinic: p?.name || '—',
+        city: p?.city || '',
+        res: fmt(resident(it.tariffs)),
+        nonres: fmt(nonresident(it.tariffs)),
+        resNum: resident(it.tariffs),
+        flag: it.is_anomaly,
+        raw: it.service_name_raw,
+        engine: 'pg_trgm',
+      }
+    })
+  }
   const nums = rows.map((r) => r.resNum).filter((v) => v != null).sort((a, b) => a - b)
   if (nums.length) {
     const best = nums[0]
     rows.forEach((r) => { r.best = r.resNum === best })
   }
   const median = nums.length ? nums[Math.floor(nums.length / 2)] : null
-  return { query: d.query, rows, stats: { best: fmt(nums[0]), median: fmt(median), max: fmt(nums[nums.length - 1]) } }
+  return { query: q, engine: rows[0]?.engine, rows, stats: { best: fmt(nums[0]), median: fmt(median), max: fmt(nums[nums.length - 1]) } }
 }
 
 export async function listUnmatched() {
@@ -208,6 +228,7 @@ export async function uploadArchive(file) {
   for (const id of data.doc_ids || []) {
     try { results.push(await post(`/admin/pipeline/${id}`)) } catch { /* skip */ }
   }
+  try { await post('/admin/reindex') } catch { /* meili optional */ }
   return { documents: data.documents, results }
 }
 

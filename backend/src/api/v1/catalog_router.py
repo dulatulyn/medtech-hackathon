@@ -22,6 +22,7 @@ from src.enums import MatchMethod, SynonymSource
 from src.repositories.catalog_repository import CatalogRepository
 from src.repositories.price_repository import PriceRepository
 from src.services.catalog_service import CatalogService
+from src.services.search_service import SearchService
 
 logger = get_logger(__name__)
 
@@ -54,6 +55,18 @@ async def search(
         for item in items
     ]
     return SearchOut(query=q, items=result_items, total=len(result_items))
+
+
+@router.get("/search/full")
+@handle_service_errors
+async def search_full(
+    search_service: FromDishka[SearchService],
+    q: str = Query(min_length=1),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """Typo-tolerant full-text search over price items via Meilisearch."""
+    hits = await search_service.search(q, limit=limit)
+    return {"query": q, "engine": "meilisearch", "items": hits, "total": len(hits)}
 
 
 @router.get("/unmatched", response_model=UnmatchedListOut)

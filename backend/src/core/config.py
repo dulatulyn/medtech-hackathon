@@ -48,6 +48,26 @@ class OcrConfig(BaseSettings):
     azure_key: str = ''
 
 
+class MeiliConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix='MEILI_',
+        env_file=ENV_FILE,
+        extra='ignore',
+    )
+    url: str = ''
+    key: str = ''
+
+
+class EmbeddingConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix='EMBED_',
+        env_file=ENV_FILE,
+        extra='ignore',
+    )
+    model: str = 'intfloat/multilingual-e5-large'  # 1024-dim, multilingual incl. Russian
+    enabled: bool = True
+
+
 class Config(BaseSettings):
     app_name: str = "Testing"
     debug: bool = False
@@ -62,6 +82,8 @@ class Config(BaseSettings):
     database: DatabaseConfig = DatabaseConfig()
     redis: RedisConfig = RedisConfig()
     ocr: OcrConfig = OcrConfig()
+    meili: MeiliConfig = MeiliConfig()
+    embedding: EmbeddingConfig = EmbeddingConfig()
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

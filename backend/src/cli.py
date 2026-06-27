@@ -115,6 +115,24 @@ async def _load_dict(path: str) -> None:
     print(f"loaded {count} services from {path}")
 
 
+async def _reindex() -> None:
+    """Rebuild the Meilisearch full-text index from all active price items."""
+    from src.integrations.search_index import MeiliIndex
+    from src.repositories.partner_repository import PartnerRepository
+    from src.services.search_service import SearchService
+
+    engine = create_async_engine(config.db_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        svc = SearchService(
+            MeiliIndex(config.meili.url, config.meili.key),
+            PriceRepository(session), PartnerRepository(session), CatalogRepository(session),
+        )
+        count = await svc.reindex()
+    await engine.dispose()
+    print(f"reindexed {count} items into Meilisearch")
+
+
 async def _seed() -> None:
     """Insert demo data (clinics, services, matched items, anomalies)."""
     from src.seed import seed_demo
@@ -150,6 +168,8 @@ def main() -> None:
 
     sub.add_parser("seed", help="insert demo data (clinics, services, items)")
 
+    sub.add_parser("reindex", help="rebuild the Meilisearch full-text index")
+
     args = parser.parse_args()
     if args.command == "load-dict":
         asyncio.run(_load_dict(args.path))
@@ -165,6 +185,8 @@ def main() -> None:
         asyncio.run(_validate_doc(args.doc_id))
     elif args.command == "seed":
         asyncio.run(_seed())
+    elif args.command == "reindex":
+        asyncio.run(_reindex())
 
 
 if __name__ == "__main__":
