@@ -52,15 +52,26 @@ class AzureOcrProvider:
         return bool(self.endpoint and self.key)
 
     async def extract_text(self, data: bytes) -> str:
-        """Call Azure Document Intelligence (prebuilt-read) and return the text layer."""
-        from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
+        """Call Azure Document Intelligence (prebuilt-read) and return the text layer.
+
+        Runs the synchronous SDK in a worker thread: the async/aiohttp transport
+        hits SSL issues on some hosts, while the sync transport uses the standard
+        requests/certifi stack that works everywhere.
+        """
+        import asyncio
+
+        return await asyncio.to_thread(self._extract_sync, data)
+
+    def _extract_sync(self, data: bytes) -> str:
+        """Blocking Azure Document Intelligence call (prebuilt-read)."""
+        from azure.ai.documentintelligence import DocumentIntelligenceClient
         from azure.core.credentials import AzureKeyCredential
 
-        async with DocumentIntelligenceClient(
+        with DocumentIntelligenceClient(
             endpoint=self.endpoint, credential=AzureKeyCredential(self.key)
         ) as client:
-            poller = await client.begin_analyze_document(
+            poller = client.begin_analyze_document(
                 "prebuilt-read", body=data, content_type="application/octet-stream"
             )
-            result = await poller.result()
+            result = poller.result()
             return result.content or ""
