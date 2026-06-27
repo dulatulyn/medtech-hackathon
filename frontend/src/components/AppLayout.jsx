@@ -1,6 +1,7 @@
 import { useState, useEffect, createContext, useContext, useCallback } from 'react'
 import { NavLink, Link, Outlet } from 'react-router-dom'
 import * as I from '../icons.jsx'
+import { getStats } from '../api.js'
 
 const NAV = [
   { group: 'Обзор', links: [{ t: 'Дашборд', to: '/dashboard', Icon: I.Dash }] },
@@ -23,6 +24,22 @@ export const useToast = () => useContext(ToastCtx)
 export default function AppLayout() {
   const [open, setOpen] = useState(false)
   const [toasts, setToasts] = useState([])
+  const [stats, setStats] = useState(null)
+  const [api, setApi] = useState('checking') // checking | live | demo
+
+  useEffect(() => {
+    getStats()
+      .then(s => { setStats(s); setApi('live') })
+      .catch(() => setApi('demo'))
+  }, [])
+
+  // live badge values from the backend (fall back to the static demo numbers)
+  const badge = (to, fallback) => {
+    if (!stats) return fallback
+    if (to === '/verify' || to === '/match') return stats.items_unmatched
+    if (to === '/anomalies') return stats.anomalies
+    return fallback
+  }
   const push = useCallback((msg) => {
     const id = Math.random().toString(36).slice(2)
     setToasts(t => [...t, { id, msg }])
@@ -49,7 +66,7 @@ export default function AppLayout() {
               <span>{g.group}</span>
               {g.links.map(l => (
                 <NavLink key={l.to} to={l.to} className="sb-link" onClick={() => setOpen(false)}>
-                  <l.Icon /><span>{l.t}</span>{l.b ? <span className="sb-badge">{l.b}</span> : null}
+                  <l.Icon /><span>{l.t}</span>{badge(l.to, l.b) ? <span className="sb-badge">{badge(l.to, l.b)}</span> : null}
                 </NavLink>
               ))}
             </div>
@@ -62,8 +79,19 @@ export default function AppLayout() {
             <button className="btn btn--icon btn--ghost sb-toggle" onClick={() => setOpen(o => !o)} aria-label="Меню"><I.Menu /></button>
             <div className="tb-search"><I.Search /><input id="globalSearch" placeholder="Найти услугу, клинику или документ…" /><kbd>/</kbd></div>
             <div className="tb-right">
-              <Link className="tb-chip" to="/verify"><span className="dot" />Верификация <b>24</b></Link>
-              <Link className="tb-chip" to="/anomalies">Аномалии <b>7</b></Link>
+              <span
+                className="tb-chip"
+                title={api === 'live' ? 'Фронтенд получает данные с бэкенда' : 'Бэкенд недоступен — показаны демо-данные'}
+                style={{
+                  background: api === 'live' ? 'rgba(22,163,74,.10)' : api === 'demo' ? 'rgba(120,120,120,.10)' : undefined,
+                  color: api === 'live' ? 'var(--ok)' : undefined,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                <span className="dot" style={{ background: api === 'live' ? 'var(--ok)' : 'var(--gray)' }} />
+                {api === 'live' ? `API подключено · ${stats.total_items} цен · ${stats.partners_active} клиник` : api === 'demo' ? 'Демо-данные (API офлайн)' : 'Проверка API…'}
+              </span>
+              <Link className="tb-chip" to="/verify"><span className="dot" />Верификация <b>{badge('/verify', 24)}</b></Link>
               <Link className="btn btn--accent btn--sm" to="/upload"><I.Upload />Загрузить</Link>
             </div>
           </header>
