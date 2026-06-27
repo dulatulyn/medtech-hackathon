@@ -129,6 +129,11 @@ export async function listServices() {
   return d.items || []
 }
 
+export async function searchServices(q) {
+  const d = await get(`/services?q=${encodeURIComponent(q)}&limit=5`)
+  return d.items || []
+}
+
 export async function matchItem(payload) {
   return post('/match', payload)
 }
