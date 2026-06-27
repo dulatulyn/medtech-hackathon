@@ -1,5 +1,10 @@
+import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from '../components/AppLayout.jsx'
+import { uploadArchive, listDocuments } from '../api.js'
+
+const FMT = { xlsx: 'XLSX', xls: 'XLS', pdf: 'PDF', scan_pdf: 'Скан', docx: 'DOCX' }
+const ST = { ok: ['ok', 'Готово', 100], warn: ['warn', 'Нужно ревью', 100], info: ['info', 'Обработка', 64], pend: ['pend', 'В очереди', 0], err: ['err', 'Ошибка', 100] }
 
 const dropCss = `
 .drop { border: 1.5px dashed var(--line-2); border-radius: var(--r); background: radial-gradient(120% 80% at 50% 0%, #fff, var(--bg)); padding: 3rem 2rem; text-align: center; transition: border-color .3s var(--ease), background .3s var(--ease); }
@@ -29,6 +34,43 @@ const steps = [
 
 export default function Upload() {
   const toast = useToast()
+  const fileRef = useRef(null)
+  const [rows, setRows] = useState(queue)
+  const [busy, setBusy] = useState(false)
+
+  const refresh = () =>
+    listDocuments()
+      .then(docs => {
+        if (docs.length) {
+          const [, , ] = []
+          setRows(docs.slice(0, 20).map(d => {
+            const st = ST[d.status] || ST.info
+            return { f: d.file, fmt: FMT[d.format] || d.format, size: '—', st: st[0], t: d.parse_log || st[1], p: st[2], warn: d.status === 'warn' }
+          }))
+        }
+      })
+      .catch(() => {})
+
+  useEffect(() => { refresh() }, [])
+
+  async function onPick(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBusy(true)
+    toast('Загрузка: ' + file.name)
+    try {
+      const r = await uploadArchive(file)
+      const matched = r.results.reduce((s, x) => s + (x.matched || 0), 0)
+      toast(`Импортировано ${r.documents} док., сопоставлено ${matched} позиций`)
+      await refresh()
+    } catch {
+      toast('Ошибка загрузки (нужен ZIP)')
+    } finally {
+      setBusy(false)
+      e.target.value = ''
+    }
+  }
+
   return (
     <>
       <style>{dropCss}</style>
@@ -47,7 +89,8 @@ export default function Upload() {
               <div className="ic"><svg viewBox="0 0 24 24"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /><path d="M12 16V4" /><path d="M8 8l4-4 4 4" /></svg></div>
               <h3>Перетащи архив сюда</h3>
               <p>ZIP до 200 МБ · или отдельные PDF, сканы, Excel, Word</p>
-              <button className="btn btn--accent" onClick={() => toast('Демо: выбор файлов')}>Выбрать файлы</button>
+              <input ref={fileRef} type="file" accept=".zip" style={{ display: 'none' }} onChange={onPick} />
+              <button className="btn btn--accent" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Обработка…' : 'Выбрать ZIP-архив'}</button>
               <div className="fmt"><span className="tag">PDF</span><span className="tag">Скан + OCR</span><span className="tag">XLSX / XLS</span><span className="tag">DOCX</span><span className="tag">ZIP</span></div>
             </div>
           </div>
@@ -66,12 +109,12 @@ export default function Upload() {
       </div>
 
       <div className="card rv">
-        <div className="card__head"><h3>Очередь обработки</h3><span className="sub">10 файлов в текущем архиве</span><div className="actions"><Link className="btn btn--ghost btn--sm" to="/documents">К документам</Link></div></div>
+        <div className="card__head"><h3>Очередь обработки</h3><span className="sub">{rows.length} файлов</span><div className="actions"><Link className="btn btn--ghost btn--sm" to="/documents">К документам</Link></div></div>
         <div className="card__body card__body--flush">
           <table className="table">
             <thead><tr><th>Файл</th><th>Формат</th><th>Размер</th><th>Статус</th><th style={{ width: 220 }}>Прогресс</th></tr></thead>
             <tbody>
-              {queue.map(q => (
+              {rows.map(q => (
                 <tr key={q.f}>
                   <td className="t-main">{q.f}</td>
                   <td><span className="tag">{q.fmt}</span></td>

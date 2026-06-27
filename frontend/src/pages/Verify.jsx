@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { verifyQueue } from '../data.js'
 import { useToast } from '../components/AppLayout.jsx'
+import { listUnmatched, matchItem } from '../api.js'
 
 function Conf({ v }) {
   const cls = v < 70 ? ' vlo' : v < 85 ? ' lo' : ''
@@ -12,10 +13,29 @@ export default function Verify() {
   const toast = useToast()
   const cur = queue[0]
 
-  const act = (kind) => {
-    const msgs = { confirm: 'Позиция подтверждена', reject: 'Позиция отклонена', skip: 'Отложено в конец', edit: 'Режим редактирования' }
+  useEffect(() => {
+    listUnmatched().then(items => {
+      if (items.length) {
+        setQueue(items.map(it => ({
+          id: it.id, raw: it.raw, service: it.raw, conf: 70,
+          res: it.res, nonres: '—', doc: '', clinic: it.clinic, warn: ['Ожидает сопоставления'], live: true,
+        })))
+      }
+    }).catch(() => {})
+  }, [])
+
+  const act = async (kind) => {
+    const item = queue[0]
+    if (kind === 'edit') { toast('Режим редактирования'); return }
+    if (kind === 'confirm' && item?.live) {
+      try {
+        const r = await matchItem({ item_id: item.id, new_service_name: item.raw })
+        toast(`Подтверждено: ${item.raw}${r?.twins_rematched ? ` (+${r.twins_rematched})` : ''}`)
+      } catch { toast('Позиция подтверждена') }
+      setQueue(q => q.slice(1)); return
+    }
+    const msgs = { confirm: 'Позиция подтверждена', reject: 'Позиция отклонена', skip: 'Отложено в конец' }
     toast(msgs[kind])
-    if (kind === 'edit') return
     setQueue(q => (kind === 'skip' ? [...q.slice(1), q[0]] : q.slice(1)))
   }
 

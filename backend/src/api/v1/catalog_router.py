@@ -80,6 +80,34 @@ async def list_unmatched(
     return UnmatchedListOut(items=result_items, total=total, limit=limit, offset=offset)
 
 
+@router.get("/anomalies")
+@handle_service_errors
+async def list_anomalies(
+    price_repo: FromDishka[PriceRepository],
+    limit: int = Query(default=200, ge=1, le=500),
+):
+    """Return active price items flagged as anomalies (price-spike / outlier detector)."""
+    items = await price_repo.list_anomalies(limit=limit)
+    return {
+        "items": [
+            {
+                "item_id": item.id,
+                "partner_id": item.partner_id,
+                "service_id": item.service_id,
+                "service_name_raw": item.service_name_raw,
+                "effective_date": str(item.effective_date) if item.effective_date else None,
+                "tariffs": [
+                    {"tariff_type": t.tariff_type.value, "amount": float(t.amount)}
+                    for t in item.tariffs
+                ],
+                "anomaly_reason": item.anomaly_reason,
+            }
+            for item in items
+        ],
+        "total": len(items),
+    }
+
+
 @router.post("/match", response_model=MatchOut)
 @handle_service_errors
 async def match_item(

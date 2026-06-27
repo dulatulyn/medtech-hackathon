@@ -152,6 +152,17 @@ class PriceRepository:
         )
         return list(result)
 
+    async def list_anomalies(self, limit: int = 200) -> list[PriceItem]:
+        """Return active items flagged as anomalies, with tariffs."""
+        result = await self.session.scalars(
+            select(PriceItem)
+            .options(selectinload(PriceItem.tariffs))
+            .where(PriceItem.is_anomaly.is_(True), PriceItem.is_active.is_(True))
+            .order_by(PriceItem.created_at.desc())
+            .limit(limit)
+        )
+        return list(result)
+
     async def list_unmatched(self, limit: int = 100, offset: int = 0) -> list[PriceItem]:
         """Return items with no service_id, with tariffs."""
         result = await self.session.scalars(

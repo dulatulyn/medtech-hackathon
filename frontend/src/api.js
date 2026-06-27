@@ -134,6 +134,83 @@ export async function searchServices(q) {
   return d.items || []
 }
 
+export async function listAnomalies() {
+  const d = await get('/anomalies?limit=200')
+  const pmap = await partnerMap()
+  return (d.items || []).map((it) => {
+    const p = pmap.get(it.partner_id)
+    const reason = it.anomaly_reason || ''
+    const pct = (reason.match(/(\d+)\s*%/) || [])[1]
+    return {
+      id: it.item_id,
+      clinic: p?.name || '—',
+      city: p?.city || '',
+      service: it.service_name_raw,
+      price: fmt(resident(it.tariffs)),
+      median: '—',
+      overpay: '—',
+      deltaPct: pct ? Number(pct) : '',
+      reason,
+      type: /резидент/i.test(reason) ? 'Нерезидент < резидент'
+        : /→/.test(reason) ? 'Скачок цены' : 'Выше медианы',
+    }
+  })
+}
+
+// Detail pages pick a representative entity (routes carry no id param yet).
+export async function firstServiceDetail() {
+  const svcs = await listServices()
+  if (!svcs.length) return null
+  const s = svcs[0]
+  const [history, compare] = await Promise.all([
+    get(`/services/${s.id}/price-history`).catch(() => []),
+    get(`/services/${s.id}/price-compare`).catch(() => []),
+  ])
+  const pmap = await partnerMap()
+  return {
+    service: s,
+    history: history.map((h) => ({ date: String(h.effective_date || '').slice(0, 4) || '—', price: resident(h.tariffs) })),
+    rows: compare.map((r) => {
+      const p = pmap.get(r.partner_id)
+      const res = r.tariffs?.resident ?? Object.values(r.tariffs || {})[0]
+      const non = r.tariffs?.far_abroad ?? r.tariffs?.cis
+      return { clinic: p?.name || '—', city: p?.city || '', res: fmt(res), nonres: fmt(non), resNum: res, flag: r.is_anomaly }
+    }),
+  }
+}
+
+export async function firstClinicDetail() {
+  const d = await get('/partners?limit=1')
+  const p = (d.items || [])[0]
+  if (!p) return null
+  const svc = await get(`/partners/${p.id}/services`).catch(() => ({ items: [] }))
+  return {
+    partner: p,
+    items: (svc.items || []).map((it) => ({
+      service: it.service_name_raw,
+      res: fmt(resident(it.tariffs)),
+      nonres: fmt(nonresident(it.tariffs)),
+      flag: it.is_anomaly,
+      method: it.match_method,
+    })),
+  }
+}
+
+// Upload a ZIP archive, then run parse->normalize->validate for each created doc.
+export async function uploadArchive(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  const r = await fetch(`${BASE}/admin/imports`, { method: 'POST', body: fd })
+  if (!r.ok) throw new Error(`${r.status} import`)
+  const body = await r.json()
+  const data = body && 'data' in body ? body.data : body
+  const results = []
+  for (const id of data.doc_ids || []) {
+    try { results.push(await post(`/admin/pipeline/${id}`)) } catch { /* skip */ }
+  }
+  return { documents: data.documents, results }
+}
+
 export async function matchItem(payload) {
   return post('/match', payload)
 }

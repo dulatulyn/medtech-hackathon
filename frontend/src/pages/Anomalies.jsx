@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { anomalies } from '../data.js'
 import { useToast } from '../components/AppLayout.jsx'
+import { listAnomalies } from '../api.js'
 
 const filters = ['Все', 'Выше медианы', 'Скачок цены', 'Нерезидент < резидент']
 
@@ -8,6 +9,10 @@ export default function Anomalies() {
   const [items, setItems] = useState(anomalies)
   const [f, setF] = useState(0)
   const toast = useToast()
+
+  useEffect(() => {
+    listAnomalies().then(a => { if (a.length) setItems(a) }).catch(() => {})
+  }, [])
 
   const shown = f === 0 ? items : items.filter(a => a.type === filters[f])
   const resolve = (id) => { toast('Аномалия обработана'); setItems(x => x.filter(i => i.id !== id)) }

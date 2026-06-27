@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { firstClinicDetail } from '../api.js'
 
 const priceList = [
   { s: 'МРТ головного мозга', cat: 'Диагностика', res: '18 900', nonres: '22 000' },
@@ -11,13 +13,21 @@ const priceList = [
 ]
 
 export default function Clinic() {
+  const [detail, setDetail] = useState(null)
+  useEffect(() => { firstClinicDetail().then(d => d && setDetail(d)).catch(() => {}) }, [])
+
+  const partner = detail?.partner
+  const list = detail?.items?.length
+    ? detail.items.map(it => ({ s: it.service, cat: '', res: it.res, nonres: it.nonres, flag: it.flag }))
+    : priceList
+
   return (
     <>
       <div className="page-head">
         <div>
           <span className="eyebrow">Витрина · партнёр</span>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>Клиника «Сункар» <span className="badge badge--ok"><span className="d" />Активна</span></h1>
-          <p>Алматы · прайс актуален на 04.06.2026 · 2 документа в архиве.</p>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>Клиника «{partner?.name || 'Сункар'}» <span className={'badge badge--' + (partner && !partner.is_active ? 'err' : 'ok')}><span className="d" />{partner && !partner.is_active ? 'Неактивна' : 'Активна'}</span></h1>
+          <p>{partner?.city || 'Алматы'} · {list.length} услуг в прайсе.</p>
         </div>
         <div className="actions"><Link className="btn btn--outline" to="/search">К поиску</Link></div>
       </div>
@@ -29,10 +39,10 @@ export default function Clinic() {
             <table className="table">
               <thead><tr><th>Услуга</th><th>Категория</th><th className="num">Резидент</th><th className="num">Нерезидент</th></tr></thead>
               <tbody>
-                {priceList.map(p => (
-                  <tr key={p.s}>
+                {list.map((p, i) => (
+                  <tr key={p.s + i} className={p.flag ? 'row-flag' : ''}>
                     <td className="t-main"><Link to="/service" style={{ color: 'inherit' }}>{p.s}</Link></td>
-                    <td><span className="tag">{p.cat}</span></td>
+                    <td>{p.cat ? <span className="tag">{p.cat}</span> : null}</td>
                     <td className="num price">{p.res}<i>₸</i></td>
                     <td className="num t-strike">{p.nonres}₸</td>
                   </tr>

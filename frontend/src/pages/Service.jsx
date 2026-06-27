@@ -1,15 +1,24 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { searchRows, priceHistory } from '../data.js'
+import { firstServiceDetail } from '../api.js'
 
 export default function Service() {
-  const max = Math.max(...priceHistory.map(p => p.price))
+  const [detail, setDetail] = useState(null)
+  useEffect(() => { firstServiceDetail().then(d => d && setDetail(d)).catch(() => {}) }, [])
+
+  const name = detail?.service?.name || 'МРТ головного мозга'
+  const cat = detail?.service?.category || 'Диагностика'
+  const rows = detail?.rows?.length ? detail.rows : searchRows
+  const history = detail?.history?.length ? detail.history : priceHistory
+  const max = Math.max(...history.map(p => p.price || 0), 1)
   return (
     <>
       <div className="page-head">
         <div>
           <span className="eyebrow">Витрина · услуга</span>
-          <h1>МРТ головного мозга</h1>
-          <p>Категория: Диагностика · синонимы: МРТ мозга, МРТ ГМ.</p>
+          <h1>{name}</h1>
+          <p>Категория: {cat}.</p>
         </div>
         <div className="actions"><Link className="btn btn--outline" to="/search">К поиску</Link></div>
       </div>
@@ -28,8 +37,8 @@ export default function Service() {
             <table className="table">
               <thead><tr><th>Клиника</th><th>Город</th><th className="num">Резидент</th><th className="num">Нерезидент</th></tr></thead>
               <tbody>
-                {searchRows.map(r => (
-                  <tr key={r.clinic} className={r.best ? 'row-best' : r.flagPct ? 'row-flag' : ''}>
+                {rows.map((r, i) => (
+                  <tr key={(r.clinic || '') + i} className={r.best ? 'row-best' : (r.flag || r.flagPct) ? 'row-flag' : ''}>
                     <td><div className="cell"><span className="logo">{r.clinic.slice(0, 2)}</span><span className="t-main">{r.clinic}</span></div></td>
                     <td className="t-sub">{r.city}</td>
                     <td className="num price">{r.res}<i>₸</i></td>
@@ -45,8 +54,8 @@ export default function Service() {
           <div className="card__head"><h3>История цены</h3><span className="sub">Сункар, медиана</span></div>
           <div className="card__body">
             <div className="bars" style={{ height: 130 }}>
-              {priceHistory.map((p, i) => (
-                <div className={'b' + (i === priceHistory.length - 1 ? ' on' : '')} key={p.date}><i style={{ height: Math.round((p.price / max) * 100) + '%' }} /><span>{p.date}</span></div>
+              {history.map((p, i) => (
+                <div className={'b' + (i === history.length - 1 ? ' on' : '')} key={p.date + i}><i style={{ height: Math.round((p.price / max) * 100) + '%' }} /><span>{p.date}</span></div>
               ))}
             </div>
             <div className="kv" style={{ marginTop: '1rem' }}>
