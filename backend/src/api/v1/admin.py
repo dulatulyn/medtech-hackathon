@@ -9,6 +9,7 @@ from src.repositories.catalog_repository import CatalogRepository
 from src.repositories.partner_repository import PartnerRepository
 from src.repositories.price_repository import PriceRepository
 from src.services.import_service import ImportService
+from src.services.embedding_service import EmbeddingService
 from src.services.normalization_service import NormalizationService
 from src.services.parse_service import ParseService
 from src.services.search_service import SearchService
@@ -138,6 +139,14 @@ async def reindex_search(search_service: FromDishka[SearchService]):
     """Rebuild the Meilisearch full-text index from all active price items."""
     count = await search_service.reindex()
     return {"indexed": count}
+
+
+@router.post("/embed")
+@handle_service_errors
+async def embed_catalog(embedding_service: FromDishka[EmbeddingService]):
+    """Generate local embeddings for all catalog services (enables semantic match)."""
+    count = await embedding_service.embed_catalog()
+    return {"embedded": count}
 
 
 @router.get("/stats")

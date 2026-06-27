@@ -13,9 +13,10 @@ logger = get_logger(__name__)
 class NormalizationService:
     """Normalizes all unmatched price items in a document."""
 
-    def __init__(self, catalog_repo: CatalogRepository, price_repo: PriceRepository):
+    def __init__(self, catalog_repo: CatalogRepository, price_repo: PriceRepository, embedder=None):
         self.catalog = catalog_repo
         self.prices = price_repo
+        self.embedder = embedder
 
     async def normalize_document(self, doc_id: str) -> NormalizationResultDTO:
         """Run the cascade on all unmatched items of a document."""
@@ -23,7 +24,9 @@ class NormalizationService:
         matched = 0
         unmatched = 0
         for item in items:
-            result = await match_service(item.service_name_raw, item.service_code_source, self.catalog)
+            result = await match_service(
+                item.service_name_raw, item.service_code_source, self.catalog, embedder=self.embedder
+            )
             if result:
                 await self.prices.update_item_match(
                     item.id, result.service_id, result.method, result.confidence

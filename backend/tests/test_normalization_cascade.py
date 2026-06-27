@@ -132,3 +132,63 @@ async def test_match_fuzzy_below_threshold_returns_none():
 
     result = await match_service("random", None, repo, threshold=0.4)
     assert result is None
+
+
+class _FakeEmbedder:
+    """Minimal embedder stub for cascade step-5 tests."""
+    is_enabled = True
+    def embed_query(self, text):
+        return [0.1, 0.2, 0.3]
+
+
+@pytest.mark.asyncio
+async def test_match_semantic_step5():
+    """Step 5: semantic match fires when steps 1-4 miss and distance is within threshold."""
+    from src.models.catalog import Service
+    svc = Service()
+    svc.id = "svc-sem"
+
+    repo = AsyncMock()
+    repo.get_by_code.return_value = None
+    repo.get_by_name.return_value = None
+    repo.find_by_synonym.return_value = None
+    repo.fuzzy_search.return_value = []
+    repo.semantic_search.return_value = [(svc, 0.05)]  # distance 0.05 -> similarity 0.95
+
+    result = await match_service("нечто похожее", None, repo, embedder=_FakeEmbedder())
+    assert result is not None
+    assert result.service_id == "svc-sem"
+    assert result.method == MatchMethod.semantic
+    assert result.confidence == 0.95
+
+
+@pytest.mark.asyncio
+async def test_semantic_rejected_when_too_far():
+    """Step 5: a semantic candidate beyond the distance threshold is rejected."""
+    from src.models.catalog import Service
+    svc = Service()
+    svc.id = "svc-far"
+
+    repo = AsyncMock()
+    repo.get_by_code.return_value = None
+    repo.get_by_name.return_value = None
+    repo.find_by_synonym.return_value = None
+    repo.fuzzy_search.return_value = []
+    repo.semantic_search.return_value = [(svc, 0.4)]  # too far
+
+    result = await match_service("совсем другое", None, repo, embedder=_FakeEmbedder())
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_no_embedder_skips_semantic():
+    """Without an embedder, the cascade returns None (no semantic step)."""
+    repo = AsyncMock()
+    repo.get_by_code.return_value = None
+    repo.get_by_name.return_value = None
+    repo.find_by_synonym.return_value = None
+    repo.fuzzy_search.return_value = []
+
+    result = await match_service("что-то", None, repo, embedder=None)
+    assert result is None
+    repo.semantic_search.assert_not_called()

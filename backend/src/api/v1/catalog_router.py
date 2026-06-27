@@ -22,6 +22,7 @@ from src.enums import MatchMethod, SynonymSource
 from src.repositories.catalog_repository import CatalogRepository
 from src.repositories.price_repository import PriceRepository
 from src.services.catalog_service import CatalogService
+from src.services.embedding_service import EmbeddingService
 from src.services.search_service import SearchService
 
 logger = get_logger(__name__)
@@ -67,6 +68,18 @@ async def search_full(
     """Typo-tolerant full-text search over price items via Meilisearch."""
     hits = await search_service.search(q, limit=limit)
     return {"query": q, "engine": "meilisearch", "items": hits, "total": len(hits)}
+
+
+@router.get("/search/semantic")
+@handle_service_errors
+async def search_semantic(
+    embedding_service: FromDishka[EmbeddingService],
+    q: str = Query(min_length=1),
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    """Semantic search over the catalog via local embeddings + pgvector cosine."""
+    results = await embedding_service.semantic_search(q, top_k=limit)
+    return {"query": q, "engine": "pgvector", "results": results, "total": len(results)}
 
 
 @router.get("/unmatched", response_model=UnmatchedListOut)

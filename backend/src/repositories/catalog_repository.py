@@ -99,6 +99,37 @@ class CatalogRepository:
             stmt = stmt.where(Service.category == category)
         return await self.session.scalar(stmt) or 0
 
+    async def set_embedding(self, service_id: str, vector: list[float]) -> None:
+        """Store the embedding vector for a service."""
+        svc = await self.session.get(Service, service_id)
+        if svc is not None:
+            svc.embedding = vector
+
+    async def list_all_services(self) -> list[Service]:
+        """Return all active services (for embedding generation)."""
+        result = await self.session.scalars(select(Service).where(Service.is_active.is_(True)))
+        return list(result)
+
+    async def count_with_embedding(self) -> int:
+        """Count services that have an embedding vector."""
+        return await self.session.scalar(
+            select(func.count()).select_from(Service).where(Service.embedding.isnot(None))
+        ) or 0
+
+    async def semantic_search(
+        self, vector: list[float], top_k: int = 5
+    ) -> list[tuple[Service, float]]:
+        """Return services nearest to the query vector by cosine distance (ascending)."""
+        dist = Service.embedding.cosine_distance(vector).label("dist")
+        stmt = (
+            select(Service, dist)
+            .where(Service.is_active.is_(True), Service.embedding.isnot(None))
+            .order_by(dist)
+            .limit(top_k)
+        )
+        rows = await self.session.execute(stmt)
+        return [(row.Service, float(row.dist)) for row in rows]
+
     async def get_partners_for_service(self, service_id: str) -> list[str]:
         """Return distinct partner_ids that have active items for this service."""
         from src.models.pricing import PriceItem

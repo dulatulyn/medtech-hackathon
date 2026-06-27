@@ -2,6 +2,7 @@
 from dishka import Provider, Scope, provide
 
 from src.core.config import Config
+from src.integrations.embeddings import EmbeddingModel
 from src.integrations.ocr import AzureOcrProvider, NoOpOcrProvider, OcrProvider
 from src.integrations.queue import NoOpQueue, TaskQueue
 from src.integrations.search_index import MeiliIndex
@@ -25,6 +26,11 @@ class InfraProvider(Provider):
     def get_meili(self, config: Config) -> MeiliIndex:
         """Provide the Meilisearch index client (NoOp when MEILI_URL is unset)."""
         return MeiliIndex(config.meili.url, config.meili.key)
+
+    @provide(scope=Scope.APP)
+    def get_embedder(self, config: Config) -> EmbeddingModel:
+        """Provide the local embedding model singleton (lazy-loads on first use)."""
+        return EmbeddingModel(config.embedding.model, config.embedding.enabled)
 
     @provide(scope=Scope.APP)
     def get_ocr(self, config: Config) -> OcrProvider:

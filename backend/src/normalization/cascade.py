@@ -32,8 +32,14 @@ async def match_service(
     source_code: str | None,
     catalog_repo: CatalogRepository,
     threshold: float = 0.4,
+    embedder=None,
+    semantic_max_distance: float = 0.12,
 ) -> MatchResult | None:
-    """Run the normalization cascade for a single raw service name."""
+    """Run the normalization cascade for a single raw service name.
+
+    If ``embedder`` is provided (has ``embed_query``), step 5 runs a pgvector
+    semantic search and accepts the nearest service within ``semantic_max_distance``.
+    """
     # Step 1: source code match
     if source_code:
         service = await catalog_repo.get_by_code(source_code)
@@ -72,6 +78,28 @@ async def match_service(
                 confidence=best_score,
             )
 
-    # Step 5: semantic stub — caller must handle via embedding pipeline
+    # Step 5: pgvector semantic match (local embeddings)
+    if embedder is not None and getattr(embedder, "is_enabled", True):
+        try:
+            vector = embedder.embed_query(raw_name)
+            results = await catalog_repo.semantic_search(vector, top_k=3)
+            if results:
+                best_service, best_dist = results[0]
+                if best_dist <= semantic_max_distance:
+                    confidence = round(1.0 - best_dist, 3)
+                    logger.info(
+                        "cascade_match",
+                        method=MatchMethod.semantic,
+                        service_id=best_service.id,
+                        distance=best_dist,
+                    )
+                    return MatchResult(
+                        service_id=best_service.id,
+                        method=MatchMethod.semantic,
+                        confidence=confidence,
+                    )
+        except Exception as exc:  # noqa: BLE001 - semantic step is best-effort
+            logger.warning("semantic_step_failed", error=str(exc))
+
     logger.info("cascade_no_match", reason="needs_semantic", raw_name=raw_name)
     return None

@@ -115,6 +115,24 @@ async def _load_dict(path: str) -> None:
     print(f"loaded {count} services from {path}")
 
 
+async def _embed() -> None:
+    """Generate local embeddings for all catalog services."""
+    from src.integrations.embeddings import EmbeddingModel
+    from src.services.embedding_service import EmbeddingService
+
+    engine = create_async_engine(config.db_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        svc = EmbeddingService(
+            EmbeddingModel(config.embedding.model, config.embedding.enabled),
+            CatalogRepository(session),
+        )
+        count = await svc.embed_catalog()
+        await session.commit()
+    await engine.dispose()
+    print(f"embedded {count} services")
+
+
 async def _reindex() -> None:
     """Rebuild the Meilisearch full-text index from all active price items."""
     from src.integrations.search_index import MeiliIndex
@@ -170,6 +188,8 @@ def main() -> None:
 
     sub.add_parser("reindex", help="rebuild the Meilisearch full-text index")
 
+    sub.add_parser("embed", help="generate local embeddings for catalog services")
+
     args = parser.parse_args()
     if args.command == "load-dict":
         asyncio.run(_load_dict(args.path))
@@ -187,6 +207,8 @@ def main() -> None:
         asyncio.run(_seed())
     elif args.command == "reindex":
         asyncio.run(_reindex())
+    elif args.command == "embed":
+        asyncio.run(_embed())
 
 
 if __name__ == "__main__":

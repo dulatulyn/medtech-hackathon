@@ -3,6 +3,7 @@
 from dishka import Provider, Scope, provide
 
 from src.core.config import Config
+from src.integrations.embeddings import EmbeddingModel
 from src.integrations.ocr import OcrProvider
 from src.integrations.queue import TaskQueue
 from src.integrations.search_index import MeiliIndex
@@ -14,6 +15,7 @@ from src.repositories.price_repository import PriceRepository
 from src.services.auth_service import AuthService
 from src.services.catalog_service import CatalogService
 from src.services.import_service import ImportService
+from src.services.embedding_service import EmbeddingService
 from src.services.normalization_service import NormalizationService
 from src.services.parse_service import ParseService
 from src.services.search_service import SearchService
@@ -55,10 +57,20 @@ class ServiceProvider(Provider):
 
     @provide(scope=Scope.REQUEST)
     def get_normalization_service(
-        self, catalog_repository: CatalogRepository, price_repository: PriceRepository
+        self,
+        catalog_repository: CatalogRepository,
+        price_repository: PriceRepository,
+        embedder: EmbeddingModel,
     ) -> NormalizationService:
         """Provide NormalizationService for the current request."""
-        return NormalizationService(catalog_repository, price_repository)
+        return NormalizationService(catalog_repository, price_repository, embedder)
+
+    @provide(scope=Scope.REQUEST)
+    def get_embedding_service(
+        self, embedder: EmbeddingModel, catalog_repository: CatalogRepository
+    ) -> EmbeddingService:
+        """Provide the EmbeddingService for the current request."""
+        return EmbeddingService(embedder, catalog_repository)
 
     @provide(scope=Scope.REQUEST)
     def get_validation_service(self, price_repository: PriceRepository) -> ValidationService:
