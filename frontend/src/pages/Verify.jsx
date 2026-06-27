@@ -1,125 +1,159 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { verifyQueue } from '../data.js'
 import { useToast } from '../components/AppLayout.jsx'
 import { listUnmatched, matchItem } from '../api.js'
+import { Skeleton } from '../components/Skeleton.jsx'
 
-function Conf({ v }) {
-  const cls = v < 70 ? ' vlo' : v < 85 ? ' lo' : ''
-  return <span className={'conf' + cls}><span className="track"><span className="fill" style={{ width: v + '%' }} /></span><b>{v}%</b></span>
-}
+const css = `
+.vrf { display: grid; grid-template-columns: 1.55fr 1fr; gap: 1.1rem; align-items: start; }
+.vrf-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--ashadow); padding: clamp(1.4rem, 2.6vw, 2.1rem); }
+.vrf-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.3rem; }
+.vrf-step { font-size: 0.78rem; color: var(--gray-2); letter-spacing: 0.03em; }
+.vrf-raw { font-size: clamp(1.7rem, 3.4vw, 2.5rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.04; color: var(--ink); }
+.vrf-from { margin-top: 0.5rem; font-size: 0.92rem; color: var(--gray); }
+.vrf-prices { display: flex; gap: 2.4rem; margin: 1.5rem 0; padding: 1.1rem 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.vrf-price span { display: block; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gray-2); margin-bottom: 0.3rem; }
+.vrf-price b { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.03em; }
+.vrf-price b i { font-style: normal; color: var(--gray-2); font-weight: 400; font-size: 0.7em; margin-left: 1px; }
+.vrf-assign { margin-top: 0.4rem; }
+.vrf-assign > label { display: block; font-size: 0.8rem; color: var(--gray); margin-bottom: 0.5rem; }
+.vrf-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.5rem; }
+.vrf-actions .kbd { margin-left: 0.45rem; font-size: 0.72rem; opacity: 0.65; }
+.vrf-side { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--ashadow); overflow: hidden; }
+.vrf-side h3 { font-size: 0.92rem; font-weight: 600; padding: 1rem 1.2rem; border-bottom: 1px solid var(--line); }
+.vrf-next { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; padding: 0.75rem 1.2rem; border-bottom: 1px solid var(--line); transition: background .2s var(--ease); }
+.vrf-next:last-child { border-bottom: none; }
+.vrf-next:hover { background: var(--surface-2); }
+.vrf-next .t-main { font-size: 0.88rem; }
+.vrf-next .t-sub { font-size: 0.76rem; }
+.vrf-quick { all: unset; cursor: pointer; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--gray-2); flex: none; transition: background .2s var(--ease), color .2s var(--ease); }
+.vrf-quick:hover { background: var(--ok-bg); color: var(--ok); }
+@media (max-width: 980px) { .vrf { grid-template-columns: 1fr; } }
+`
 
 export default function Verify() {
   const [queue, setQueue] = useState(verifyQueue)
+  const [loading, setLoading] = useState(true)
+  const [done, setDone] = useState(0)
+  const [assign, setAssign] = useState('')
   const toast = useToast()
   const cur = queue[0]
+  const total = done + queue.length
 
   useEffect(() => {
     listUnmatched().then(items => {
       if (items.length) {
-        setQueue(items.map(it => ({
-          id: it.id, raw: it.raw, service: it.raw, conf: 70,
-          res: it.res, nonres: '—', doc: '', clinic: it.clinic, warn: ['Ожидает сопоставления'], live: true,
-        })))
+        setQueue(items.map(it => ({ id: it.id, raw: it.raw, res: it.res, nonres: it.nonres || '—', clinic: it.clinic, doc: it.doc || '', live: true })))
       }
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
-  const act = async (kind) => {
+  const drop = (rotate) => { setAssign(''); setQueue(q => rotate ? [...q.slice(1), q[0]] : q.slice(1)) }
+
+  const act = useCallback(async (kind) => {
     const item = queue[0]
-    if (kind === 'edit') { toast('Режим редактирования'); return }
-    if (kind === 'confirm' && item?.live) {
+    if (!item) return
+    if (kind === 'skip') { toast('Отложено в конец'); drop(true); return }
+    if (kind === 'reject') { toast('Позиция отклонена'); setDone(d => d + 1); drop(false); return }
+    const name = assign.trim() || item.raw
+    if (item.live) {
       try {
-        const r = await matchItem({ item_id: item.id, new_service_name: item.raw })
-        toast(`Подтверждено: ${item.raw}${r?.twins_rematched ? ` (+${r.twins_rematched})` : ''}`)
+        const r = await matchItem({ item_id: item.id, new_service_name: name })
+        toast(`Сопоставлено: ${name}${r?.twins_rematched ? ` · +${r.twins_rematched} похожих` : ''}`)
       } catch { toast('Позиция подтверждена') }
-      setQueue(q => q.slice(1)); return
+    } else toast('Позиция подтверждена')
+    setDone(d => d + 1); drop(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, assign, toast])
+
+  useEffect(() => {
+    const h = (e) => {
+      const inInput = document.activeElement?.tagName === 'INPUT'
+      if (e.key === 'Enter') { e.preventDefault(); act('confirm') }
+      else if (!inInput && (e.key === 'ArrowRight')) { e.preventDefault(); act('skip') }
     }
-    const msgs = { confirm: 'Позиция подтверждена', reject: 'Позиция отклонена', skip: 'Отложено в конец' }
-    toast(msgs[kind])
-    setQueue(q => (kind === 'skip' ? [...q.slice(1), q[0]] : q.slice(1)))
-  }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [act])
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <span className="eyebrow">Качество</span>
-          <h1>Очередь верификации</h1>
-          <p>Сверь исходный документ с извлечёнными данными и подтверди сопоставление.</p>
+      <style>{css}</style>
+      <div className="phero">
+        <div className="phero__head">
+          <span className="phero__eyebrow">Качество</span>
+          <h1 className="phero__title">Верификация</h1>
+          <p className="phero__sub">Одна позиция за раз — подтверди или сопоставь со справочником.</p>
         </div>
-        <div className="actions"><span className="badge badge--accent">{queue.length} в очереди</span></div>
+        <div className="phero__metrics">
+          {loading ? (
+            <div className="phero__metric"><Skeleton w="3rem" h="2rem" r="10px" /><span>в очереди</span></div>
+          ) : (
+            <>
+              <div className="phero__metric"><b className="num">{queue.length}</b><span>в очереди</span></div>
+              <div className="phero__metric"><b className="num">{done}</b><span>обработано</span></div>
+            </>
+          )}
+        </div>
       </div>
 
-      {!cur ? (
-        <div className="card"><div className="empty"><b style={{ fontSize: '1.1rem' }}>Очередь пуста 🎉</b><div style={{ marginTop: '0.4rem' }}>Все позиции проверены.</div></div></div>
+      {loading ? (
+        <div className="vrf">
+          <div className="vrf-card">
+            <Skeleton w="40%" h="0.8rem" r="999px" />
+            <div style={{ marginTop: '1rem' }}><Skeleton w="70%" h="2.3rem" r="10px" /></div>
+            <div style={{ marginTop: '1.5rem' }}><Skeleton w="100%" h="4rem" r="12px" /></div>
+            <div style={{ marginTop: '1.5rem' }}><Skeleton w="100%" h="2.6rem" r="12px" /></div>
+            <div className="vrf-actions"><Skeleton w={150} h="2.5rem" r="999px" /><Skeleton w={120} h="2.5rem" r="999px" /></div>
+          </div>
+          <div className="vrf-side"><h3>Дальше в очереди</h3>{Array.from({ length: 6 }).map((_, i) => <div className="vrf-next" key={i}><Skeleton w="60%" h="1rem" r="8px" /><Skeleton w={28} h={28} r="8px" /></div>)}</div>
+        </div>
+      ) : !cur ? (
+        <div className="card"><div className="empty"><b style={{ fontSize: '1.2rem' }}>Очередь пуста 🎉</b><div style={{ marginTop: '0.4rem' }}>Все позиции обработаны.</div></div></div>
       ) : (
-        <>
-          <div className="split" style={{ marginBottom: '1.1rem' }}>
-            <div className="doc-frame rv">
-              <div className="doc-frame__bar"><span className="dots"><i /><i /><i /></span>{cur.doc}</div>
-              <div className="doc-frame__page">
-                <div style={{ fontWeight: 600, marginBottom: '0.7rem' }}>Прайс-лист · {cur.clinic}</div>
-                <table>
-                  <thead><tr><th>Наименование</th><th>Резидент</th><th>Нерезидент</th></tr></thead>
-                  <tbody>
-                    <tr><td>Приём врача первичный</td><td>6 000</td><td>7 000</td></tr>
-                    <tr><td className="hl">{cur.raw}</td><td className="hl">{cur.res}</td><td className="hl">{cur.nonres}</td></tr>
-                    <tr><td>Повторный приём</td><td>4 500</td><td>5 200</td></tr>
-                    <tr><td>Забор крови</td><td>1 200</td><td>1 500</td></tr>
-                  </tbody>
-                </table>
-                <div className="hint" style={{ marginTop: '0.9rem' }}>Подсвечена строка, извлечённая системой.</div>
+        <div className="vrf">
+          <div className="vrf-card rv">
+            <div className="vrf-top">
+              <span className="vrf-step">Позиция {done + 1} из {total}</span>
+              <span className="badge badge--warn"><span className="d" />не сопоставлено</span>
+            </div>
+
+            <div className="vrf-raw">«{cur.raw}»</div>
+            <div className="vrf-from">из прайса · <b style={{ color: 'var(--ink-2)' }}>{cur.clinic}</b>{cur.doc ? ` · ${cur.doc}` : ''}</div>
+
+            <div className="vrf-prices">
+              <div className="vrf-price"><span>Резидент</span><b className="num">{cur.res || '—'}<i>₸</i></b></div>
+              <div className="vrf-price"><span>Нерезидент</span><b className="num">{cur.nonres}{cur.nonres !== '—' && <i>₸</i>}</b></div>
+            </div>
+
+            <div className="vrf-assign">
+              <label>Сопоставить со справочником</label>
+              <div className="search-in">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.2-3.2" /></svg>
+                <input className="input" placeholder={`Найти услугу или оставить «${cur.raw}»`} value={assign} onChange={e => setAssign(e.target.value)} />
               </div>
             </div>
 
-            <div className="card rv">
-              <div className="card__head"><h3>Извлечённые данные</h3><span className="sub">позиция {verifyQueue.length - queue.length + 1} из {verifyQueue.length}</span></div>
-              <div className="card__body">
-                <div className="kv">
-                  <div className="kv-row"><span className="k">Из документа</span><span className="v">«{cur.raw}»</span></div>
-                  <div className="kv-row"><span className="k">Справочник</span><span className="v" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>{cur.service} <Conf v={cur.conf} /></span></div>
-                  <div className="kv-row"><span className="k">Цена резидент</span><span className="v num price">{cur.res}<i>₸</i></span></div>
-                  <div className="kv-row"><span className="k">Цена нерезидент</span><span className="v num price">{cur.nonres}<i>₸</i></span></div>
-                  <div className="kv-row"><span className="k">Источник</span><span className="v">{cur.clinic}</span></div>
-                </div>
+            <div className="vrf-actions">
+              <button className="btn btn--ok" onClick={() => act('confirm')}>{assign.trim() ? `Сопоставить` : `Подтвердить`}<span className="kbd">⏎</span></button>
+              <button className="btn btn--outline" onClick={() => act('skip')}>Пропустить<span className="kbd">→</span></button>
+              <button className="btn btn--ghost" onClick={() => act('reject')}>Отклонить</button>
+            </div>
+          </div>
 
-                {cur.warn.length > 0 && (
-                  <div className="wrap-gap" style={{ marginTop: '1rem' }}>
-                    {cur.warn.map(w => <span className="badge badge--warn" key={w}><span className="d" />{w}</span>)}
-                  </div>
-                )}
-
-                <div className="wrap-gap" style={{ marginTop: '1.3rem' }}>
-                  <button className="btn btn--ok" onClick={() => act('confirm')}>Подтвердить</button>
-                  <button className="btn btn--outline" onClick={() => act('edit')}>Исправить</button>
-                  <button className="btn btn--ghost" onClick={() => act('reject')}>Отклонить</button>
-                  <button className="btn btn--ghost" onClick={() => act('skip')}>Пропустить</button>
-                </div>
-                <div className="hint" style={{ marginTop: '0.9rem' }}>Версионирование: старая цена архивируется, не удаляется.</div>
+          <div className="vrf-side rv">
+            <h3>Дальше в очереди · {Math.max(queue.length - 1, 0)}</h3>
+            {queue.slice(1, 9).map(q => (
+              <div className="vrf-next" key={q.id}>
+                <div><div className="t-main">{q.raw}</div><div className="t-sub">{q.clinic}{q.res ? ` · ${q.res}₸` : ''}</div></div>
+                <button className="vrf-quick" title="Подтвердить" onClick={() => { toast('Подтверждено'); setDone(d => d + 1); setQueue(x => x.filter(i => i.id !== q.id)) }}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 6.5" /></svg>
+                </button>
               </div>
-            </div>
+            ))}
+            {queue.length <= 1 && <div className="vrf-next" style={{ color: 'var(--gray-2)' }}>Больше позиций нет</div>}
           </div>
-
-          <div className="card rv">
-            <div className="card__head"><h3>Дальше в очереди</h3></div>
-            <div className="card__body card__body--flush">
-              <table className="table">
-                <thead><tr><th>Из документа</th><th>Справочник</th><th>Уверенность</th><th>Клиника</th><th></th></tr></thead>
-                <tbody>
-                  {queue.slice(1).map(q => (
-                    <tr key={q.id}>
-                      <td className="t-main">{q.raw}</td>
-                      <td>{q.service}</td>
-                      <td><Conf v={q.conf} /></td>
-                      <td className="t-sub">{q.clinic}</td>
-                      <td className="num"><button className="btn btn--ghost btn--sm" onClick={() => { toast('Позиция подтверждена'); setQueue(x => x.filter(i => i.id !== q.id)) }}>Подтвердить</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
+        </div>
       )}
     </>
   )

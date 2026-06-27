@@ -60,7 +60,7 @@ export default function AppLayout() {
     <ToastCtx.Provider value={push}>
       <div className="app">
         <aside className={'sidebar' + (open ? ' open' : '')}>
-          <div className="sb-brand"><span className="sb-mark" /><b>medarchive</b><span className="sb-role">Оператор</span></div>
+          <Link to="/dashboard" className="sb-brand" onClick={() => setOpen(false)}><span className="sb-mark" /><b>medarchive</b><span className="sb-role">Оператор</span></Link>
           {NAV.map(g => (
             <div className="sb-group" key={g.group}>
               <span>{g.group}</span>
@@ -89,7 +89,7 @@ export default function AppLayout() {
                 }}
               >
                 <span className="dot" style={{ background: api === 'live' ? 'var(--ok)' : 'var(--gray)' }} />
-                {api === 'live' ? `API подключено · ${stats.total_items} цен · ${stats.partners_active} клиник` : api === 'demo' ? 'Демо-данные (API офлайн)' : 'Проверка API…'}
+                {api === 'live' ? `API · ${stats.total_items} цен · ${stats.partners_active} клиник` : api === 'demo' ? 'Демо-данные (офлайн)' : 'Проверка…'}
               </span>
               <Link className="tb-chip" to="/verify"><span className="dot" />Верификация <b>{badge('/verify', 24)}</b></Link>
               <Link className="btn btn--accent btn--sm" to="/upload"><I.Upload />Загрузить</Link>
