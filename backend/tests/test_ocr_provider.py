@@ -28,11 +28,12 @@ def test_azure_configured_with_credentials():
     assert AzureOcrProvider(endpoint="https://x", key="secret").is_configured is True
 
 
-@pytest.mark.asyncio
-async def test_azure_extract_not_implemented_yet():
+def test_azure_extract_is_coroutine():
+    """extract_text is implemented as an async call into Azure Document Intelligence."""
+    import inspect
+
     provider = AzureOcrProvider(endpoint="https://x", key="secret")
-    with pytest.raises(NotImplementedError):
-        await provider.extract_text(b"scan")
+    assert inspect.iscoroutinefunction(provider.extract_text)
 
 
 def test_providers_satisfy_protocol():

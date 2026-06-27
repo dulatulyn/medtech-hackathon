@@ -52,5 +52,15 @@ class AzureOcrProvider:
         return bool(self.endpoint and self.key)
 
     async def extract_text(self, data: bytes) -> str:
-        """Call Azure Read OCR and return the concatenated text layer."""
-        raise NotImplementedError("AzureOcrProvider.extract_text not yet implemented")
+        """Call Azure Document Intelligence (prebuilt-read) and return the text layer."""
+        from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
+        from azure.core.credentials import AzureKeyCredential
+
+        async with DocumentIntelligenceClient(
+            endpoint=self.endpoint, credential=AzureKeyCredential(self.key)
+        ) as client:
+            poller = await client.begin_analyze_document(
+                "prebuilt-read", body=data, content_type="application/octet-stream"
+            )
+            result = await poller.result()
+            return result.content or ""
