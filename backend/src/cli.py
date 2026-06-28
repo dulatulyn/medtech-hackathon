@@ -161,6 +161,27 @@ async def _seed() -> None:
         counts = await seed_demo(session)
     await engine.dispose()
     print("seeded:", ", ".join(f"{k}={v}" for k, v in counts.items()))
+    # ensure a demo login account exists (idempotent)
+    await _create_user("operator", "operator@nomad.kz", "Operator123")
+    print("demo login: operator / Operator123")
+
+
+async def _create_user(username: str, email: str, password: str) -> None:
+    """Create a login user (idempotent: skips if the username already exists)."""
+    from src.core.security import hash_password
+    from src.repositories.auth_repository import AuthRepository
+
+    engine = create_async_engine(config.db_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        repo = AuthRepository(session)
+        if await repo.get_user_by_username(username):
+            print(f"user '{username}' already exists — skipped")
+        else:
+            await repo.create_user(username=username, email=email, hashed_password=hash_password(password))
+            await session.commit()
+            print(f"created user '{username}' ({email})")
+    await engine.dispose()
 
 
 def main() -> None:
@@ -190,6 +211,11 @@ def main() -> None:
 
     sub.add_parser("embed", help="generate local embeddings for catalog services")
 
+    cu = sub.add_parser("create-user", help="create a login user")
+    cu.add_argument("username")
+    cu.add_argument("email")
+    cu.add_argument("password")
+
     args = parser.parse_args()
     if args.command == "load-dict":
         asyncio.run(_load_dict(args.path))
@@ -209,6 +235,8 @@ def main() -> None:
         asyncio.run(_reindex())
     elif args.command == "embed":
         asyncio.run(_embed())
+    elif args.command == "create-user":
+        asyncio.run(_create_user(args.username, args.email, args.password))
 
 
 if __name__ == "__main__":

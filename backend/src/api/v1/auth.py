@@ -51,8 +51,8 @@ async def register(
         key="access_token",
         value=tokens.access_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=config.cookie_secure,
+        samesite=config.cookie_samesite,
         max_age=config.access_token_expire_minutes * 60,
         path="/"
     )
@@ -60,8 +60,8 @@ async def register(
         key="refresh_token",
         value=tokens.refresh_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=config.cookie_secure,
+        samesite=config.cookie_samesite,
         max_age=config.refresh_token_expire_days * 24 * 60 * 60,
         path="/"
     )
@@ -93,8 +93,8 @@ async def login(
         key="access_token",
         value=tokens.access_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=config.cookie_secure,
+        samesite=config.cookie_samesite,
         max_age=config.access_token_expire_minutes * 60,
         path="/"
     )
@@ -102,8 +102,8 @@ async def login(
         key="refresh_token",
         value=tokens.refresh_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=config.cookie_secure,
+        samesite=config.cookie_samesite,
         max_age=config.refresh_token_expire_days * 24 * 60 * 60,
         path="/"
     )
@@ -140,8 +140,8 @@ async def refresh_token(
         key="access_token",
         value=tokens.access_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=config.cookie_secure,
+        samesite=config.cookie_samesite,
         max_age=config.access_token_expire_minutes * 60,
         path="/"
     )
@@ -149,8 +149,8 @@ async def refresh_token(
         key="refresh_token",
         value=tokens.refresh_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=config.cookie_secure,
+        samesite=config.cookie_samesite,
         max_age=config.refresh_token_expire_days * 24 * 60 * 60,
         path="/"
     )
@@ -160,8 +160,8 @@ async def refresh_token(
 @router.post("/logout", summary="Logout user", description="Clears authentication cookies.", status_code=status.HTTP_200_OK)
 async def logout(response: Response):
     """Logout user by clearing cookies."""
-    response.delete_cookie(key="access_token", httponly=True, secure=True, samesite="none", path="/")
-    response.delete_cookie(key="refresh_token", httponly=True, secure=True, samesite="none", path="/")
+    response.delete_cookie(key="access_token", httponly=True, secure=config.cookie_secure, samesite=config.cookie_samesite, path="/")
+    response.delete_cookie(key="refresh_token", httponly=True, secure=config.cookie_secure, samesite=config.cookie_samesite, path="/")
     return {"message": "Logout successful"}
 
 @router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)

@@ -77,6 +77,12 @@ class Config(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
+    # Auth cookie flags. Defaults suit local http dev (cookies persist over
+    # http://localhost via the Vite proxy). In production set COOKIE_SECURE=true
+    # and COOKIE_SAMESITE=none for cross-site HTTPS.
+    cookie_secure: bool = False
+    cookie_samesite: str = "lax"
+
     storage_dir: str = "storage"
 
     database: DatabaseConfig = DatabaseConfig()

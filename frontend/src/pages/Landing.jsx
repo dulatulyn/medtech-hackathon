@@ -80,7 +80,7 @@ export default function Landing() {
         </nav>
         <a href="#top" className="nav__brand">medarchive</a>
         <div className="nav__actions">
-          <Link to="/dashboard" className="nav__login">Войти</Link>
+          <Link to="/login" className="nav__login">Войти</Link>
           <Link to="/dashboard" className="btn btn--white nav__cta">Загрузить архив</Link>
           <button className="grid-ic" onClick={() => setMenuOpen(true)} aria-label="Меню">
             {Array.from({ length: 9 }).map((_, i) => <span key={i} />)}
@@ -94,7 +94,7 @@ export default function Landing() {
           <div className="menupanel__top">
             <span className="menupanel__title">Меню</span>
             <div className="menupanel__act">
-              <Link to="/dashboard" className="menupanel__login">Войти</Link>
+              <Link to="/login" className="menupanel__login">Войти</Link>
               <Link to="/dashboard" className="btn btn--dark">Загрузить архив</Link>
               <button className="grid-ic grid-ic--dark" onClick={() => setMenuOpen(false)} aria-label="Закрыть">
                 {Array.from({ length: 9 }).map((_, i) => <span key={i} />)}

@@ -2,6 +2,9 @@ import { useState, useEffect, createContext, useContext, useCallback } from 'rea
 import { NavLink, Link, Outlet, useNavigate } from 'react-router-dom'
 import * as I from '../icons.jsx'
 import { getStats } from '../api.js'
+import { useAuth } from '../auth.jsx'
+
+const initials = (name) => (name || '?').slice(0, 2).toUpperCase()
 
 const NAV = [
   { group: 'Обзор', links: [{ t: 'Дашборд', to: '/dashboard', Icon: I.Dash }] },
@@ -26,7 +29,11 @@ export default function AppLayout() {
   const [toasts, setToasts] = useState([])
   const [stats, setStats] = useState(null)
   const [api, setApi] = useState('checking') // checking | live | demo
+  const [menu, setMenu] = useState(false)
   const navigate = useNavigate()
+  const { user, logout } = useAuth()
+
+  const doLogout = async () => { await logout(); navigate('/login', { replace: true }) }
 
   useEffect(() => {
     getStats()
@@ -72,7 +79,7 @@ export default function AppLayout() {
               ))}
             </div>
           ))}
-          <div className="sb-user"><span className="ava">АО</span><div><b>Айгерим Оператор</b><span>Nomad Insurance</span></div></div>
+          <div className="sb-user"><span className="ava">{initials(user?.username)}</span><div><b>{user?.username || 'Оператор'}</b><span>{user?.email || ''}</span></div></div>
         </aside>
 
         <div className="main">
@@ -92,8 +99,20 @@ export default function AppLayout() {
                 <span className="dot" style={{ background: api === 'live' ? 'var(--ok)' : 'var(--gray)' }} />
                 {api === 'live' ? `API подключено · ${stats.total_items} цен · ${stats.partners_active} клиник` : api === 'demo' ? 'Демо-данные (API офлайн)' : 'Проверка API…'}
               </span>
-              <Link className="tb-chip" to="/verify"><span className="dot" />Верификация <b>{badge('/verify', 24)}</b></Link>
-              <Link className="btn btn--accent btn--sm" to="/upload"><I.Upload />Загрузить</Link>
+              <Link className="tb-chip tb-chip--verify" to="/verify"><span className="dot" />Верификация <b>{badge('/verify', 0)}</b></Link>
+              <div className="tb-user">
+                <button className="tb-ava" onClick={() => setMenu(m => !m)} aria-label="Профиль">{initials(user?.username)}</button>
+                {menu && (
+                  <>
+                    <div className="tb-menu-scrim" onClick={() => setMenu(false)} />
+                    <div className="tb-menu">
+                      <div className="tb-menu__head"><b>{user?.username || 'Оператор'}</b><span>{user?.email || ''}</span></div>
+                      <Link className="tb-menu__item" to="/upload" onClick={() => setMenu(false)}><I.Upload />Загрузить архив</Link>
+                      <button className="tb-menu__item tb-menu__item--danger" onClick={doLogout}><I.Logout />Выйти</button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </header>
           <main className="page"><Outlet /></main>

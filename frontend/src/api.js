@@ -5,7 +5,7 @@
 const BASE = import.meta.env.VITE_API_URL || '/api/v1'
 
 async function get(path) {
-  const r = await fetch(`${BASE}${path}`, { headers: { Accept: 'application/json' } })
+  const r = await fetch(`${BASE}${path}`, { headers: { Accept: 'application/json' }, credentials: 'include' })
   if (!r.ok) throw new Error(`${r.status} ${path}`)
   const body = await r.json()
   return body && 'data' in body ? body.data : body
@@ -15,11 +15,31 @@ async function post(path, payload) {
   const r = await fetch(`${BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(payload),
   })
-  if (!r.ok) throw new Error(`${r.status} ${path}`)
+  if (!r.ok) {
+    let detail = `${r.status}`
+    try { const b = await r.json(); detail = b.message || b.detail || detail } catch { /* keep */ }
+    const e = new Error(detail); e.status = r.status; throw e
+  }
   const body = await r.json()
   return body && 'data' in body ? body.data : body
+}
+
+// ---- auth -----------------------------------------------------------------
+
+export async function authMe() {
+  return get('/auth/me') // throws on 401
+}
+export async function authLogin(username, password) {
+  return post('/auth/login', { username, password })
+}
+export async function authRegister(username, email, password) {
+  return post('/auth/register', { username, email, password })
+}
+export async function authLogout() {
+  return post('/auth/logout', {})
 }
 
 // ---- mapping helpers -------------------------------------------------------
@@ -311,7 +331,7 @@ export async function listAnomalies() {
 export async function uploadArchive(file) {
   const fd = new FormData()
   fd.append('file', file)
-  const r = await fetch(`${BASE}/admin/imports`, { method: 'POST', body: fd })
+  const r = await fetch(`${BASE}/admin/imports`, { method: 'POST', body: fd, credentials: 'include' })
   if (!r.ok) throw new Error(`${r.status} import`)
   const body = await r.json()
   const data = body && 'data' in body ? body.data : body
