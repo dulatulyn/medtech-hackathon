@@ -59,13 +59,13 @@ def _parse_xlsx(path: Path) -> list[DictionaryEntryDTO]:
 
     entries: list[DictionaryEntryDTO] = []
     for row in rows:
-        name = col(row, "service_name", "name", "наименование")
+        name = col(row, "service_name", "name", "name_ru", "наименование")
         if not name:
             continue
         entries.append(DictionaryEntryDTO(
             name=str(name).strip(),
-            category=(col(row, "category", "категория") or None),
-            icd_code=(col(row, "icd_code", "code", "код") or None),
+            category=(col(row, "category", "специальность", "категория") or None),
+            icd_code=(col(row, "icd_code", "tarificatrcode", "код", "code") or None),
             synonyms=_synonyms_from(col(row, "synonyms", "синонимы")),
         ))
     return entries
