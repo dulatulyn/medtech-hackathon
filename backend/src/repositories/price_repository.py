@@ -176,11 +176,11 @@ class PriceRepository:
         return list(result)
 
     async def list_unmatched(self, limit: int = 100, offset: int = 0) -> list[PriceItem]:
-        """Return items with no service_id, with tariffs."""
+        """Return active items with no service_id, with tariffs."""
         result = await self.session.scalars(
             select(PriceItem)
             .options(selectinload(PriceItem.tariffs))
-            .where(PriceItem.service_id.is_(None))
+            .where(PriceItem.service_id.is_(None), PriceItem.is_active.is_(True))
             .order_by(PriceItem.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -188,9 +188,10 @@ class PriceRepository:
         return list(result)
 
     async def count_unmatched(self) -> int:
-        """Count items with no service_id."""
+        """Count active items with no service_id."""
         return await self.session.scalar(
-            select(func.count()).select_from(PriceItem).where(PriceItem.service_id.is_(None))
+            select(func.count()).select_from(PriceItem)
+            .where(PriceItem.service_id.is_(None), PriceItem.is_active.is_(True))
         ) or 0
 
     async def get_item_with_tariffs(self, item_id: str) -> PriceItem | None:
@@ -239,23 +240,25 @@ class PriceRepository:
         return {str(row.parse_status.value): row.n for row in rows}
 
     async def count_anomalies(self) -> int:
-        """Count price items flagged as anomalous."""
+        """Count active price items flagged as anomalous (matches the anomalies queue)."""
         return await self.session.scalar(
-            select(func.count()).select_from(PriceItem).where(PriceItem.is_anomaly.is_(True))
+            select(func.count()).select_from(PriceItem)
+            .where(PriceItem.is_anomaly.is_(True), PriceItem.is_active.is_(True))
         ) or 0
 
     async def get_match_stats(self) -> dict[str, int]:
-        """Return item counts grouped by match_method."""
+        """Return active item counts grouped by match_method."""
         rows = await self.session.execute(
             select(PriceItem.match_method, func.count().label("n"))
+            .where(PriceItem.is_active.is_(True))
             .group_by(PriceItem.match_method)
         )
         return {str(row.match_method.value): row.n for row in rows}
 
     async def count_total_items(self) -> int:
-        """Count all price items."""
+        """Count active price items (the live dataset shown across the app)."""
         return await self.session.scalar(
-            select(func.count()).select_from(PriceItem)
+            select(func.count()).select_from(PriceItem).where(PriceItem.is_active.is_(True))
         ) or 0
 
     async def find_unmatched_by_name(self, service_name_raw: str) -> list[PriceItem]:
