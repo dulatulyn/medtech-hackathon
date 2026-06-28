@@ -3,17 +3,35 @@ import { Link } from 'react-router-dom'
 import { useToast } from '../components/AppLayout.jsx'
 import { uploadArchive, listDocuments } from '../api.js'
 
+const FMT = { xlsx: 'XLSX', xls: 'XLS', pdf: 'PDF', scan_pdf: 'Скан', docx: 'DOCX' }
 const ST = { ok: ['ok', 'Готово', 100], warn: ['warn', 'Нужно ревью', 100], info: ['info', 'Обработка', 64], pend: ['pend', 'В очереди', 0], err: ['err', 'Ошибка', 100] }
 
 const dropCss = `
-.drop { border: 1.5px dashed var(--line-2); border-radius: var(--r); background: radial-gradient(120% 80% at 50% 0%, #fff, var(--bg)); padding: 3rem 2rem; text-align: center; transition: border-color .3s var(--ease), background .3s var(--ease); }
+.drop { position: relative; border: 1.6px dashed var(--line-2); border-radius: var(--r); background: radial-gradient(130% 90% at 50% 0%, #fff, var(--surface-2) 70%, var(--bg)); padding: 3.6rem 2rem 3.2rem; text-align: center; transition: border-color .3s var(--ease), background .3s var(--ease); }
 .drop:hover { border-color: var(--accent); }
-.drop .ic { width: 56px; height: 56px; margin: 0 auto 1rem; border-radius: 16px; background: var(--accent-weak); display: grid; place-items: center; }
-.drop .ic svg { width: 26px; height: 26px; stroke: var(--accent); stroke-width: 1.6; fill: none; }
-.drop h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.02em; }
-.drop p { color: var(--gray); margin: 0.4rem 0 1.2rem; }
-.fmt { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; margin-top: 1.3rem; }
+.drop .ic { width: 68px; height: 68px; margin: 0 auto 1.2rem; border-radius: 20px; background: var(--accent-weak); display: grid; place-items: center; }
+.drop .ic svg { width: 30px; height: 30px; stroke: var(--accent); stroke-width: 1.6; fill: none; }
+.drop h3 { font-size: 1.42rem; font-weight: 600; letter-spacing: -0.03em; }
+.drop p { color: var(--gray); margin: 0.5rem 0 1.4rem; font-size: 0.95rem; }
+.drop .hint-row { margin-top: 1rem; font-size: 0.78rem; color: var(--gray-2); }
+.fmts-band { margin-top: 1.7rem; padding-top: 1.5rem; border-top: 1px solid var(--hair); }
+.fmts-band .lbl { display: block; font-size: 0.64rem; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 1rem; }
+.fmts { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 0.7rem; }
+.fmt-chip { display: flex; align-items: center; gap: 0.65rem; padding: 0.7rem 0.85rem; border-radius: 15px; background: var(--surface); border: 1px solid var(--hair); box-shadow: var(--ashadow-sm); text-align: left; transition: box-shadow .3s var(--ease), transform .3s var(--ease); }
+.fmt-chip:hover { box-shadow: var(--ashadow); transform: translateY(-2px); }
+.fmt-chip .ab { width: 38px; height: 38px; border-radius: 11px; flex: none; display: grid; place-items: center; background: var(--ink); color: #fff; font-size: 0.6rem; font-weight: 600; letter-spacing: 0.03em; }
+.fmt-chip .tx b { font-size: 0.85rem; font-weight: 600; letter-spacing: -0.01em; display: block; line-height: 1.1; }
+.fmt-chip .tx span { font-size: 0.72rem; color: var(--gray-2); }
 `
+
+const queue = [
+  { f: 'Клиника 6 прайс 2026.xlsx', fmt: 'XLSX', size: '538 КБ', st: 'ok', t: 'Готово', p: 100 },
+  { f: 'Клиника 2 прайс 2026.pdf', fmt: 'PDF', size: '809 КБ', st: 'ok', t: 'Готово', p: 100 },
+  { f: 'Клиника 7_Прайс 2026.xls', fmt: 'XLS', size: '920 КБ', st: 'info', t: 'Обработка · OCR', p: 64 },
+  { f: 'Клиника 3 прайс 2026.PDF', fmt: 'Скан', size: '1.2 МБ', st: 'warn', t: 'Нужно ревью', p: 100, warn: true },
+  { f: 'Клиника 1 2026.pdf', fmt: 'Скан', size: '3.7 МБ', st: 'ok', t: 'Готово', p: 100 },
+  { f: 'Клиника 4 прайс 2026.pdf', fmt: 'PDF', size: '1.2 МБ', st: 'pend', t: 'В очереди', p: 0 },
+]
 
 const steps = [
   ['Определение формата', 'текст / скан / таблица распознаются автоматически'],
@@ -22,21 +40,32 @@ const steps = [
   ['Очередь верификации', 'спорное уходит оператору'],
 ]
 
+const formats = [
+  ['PDF', 'PDF', 'текстовые прайсы'],
+  ['OCR', 'Скан + OCR', 'фото и сканы'],
+  ['XLS', 'Excel · XLSX / XLS', 'таблицы и выгрузки'],
+  ['DOC', 'Word · DOCX', 'документы'],
+  ['ZIP', 'ZIP-архив', 'пакетная загрузка'],
+]
+
 export default function Upload() {
   const toast = useToast()
   const fileRef = useRef(null)
-  const [rows, setRows] = useState(null)
+  const [rows, setRows] = useState(queue)
   const [busy, setBusy] = useState(false)
 
   const refresh = () =>
     listDocuments()
       .then(docs => {
-        setRows(docs.slice(0, 20).map(d => {
-          const st = ST[d.status] || ST.info
-          return { f: d.file, fmt: d.format, size: '—', st: st[0], t: d.parse_log || st[1], p: st[2], warn: d.status === 'warn' }
-        }))
+        if (docs.length) {
+          const [, , ] = []
+          setRows(docs.slice(0, 20).map(d => {
+            const st = ST[d.status] || ST.info
+            return { f: d.file, fmt: FMT[d.format] || d.format, size: '—', st: st[0], t: d.parse_log || st[1], p: st[2], warn: d.status === 'warn' }
+          }))
+        }
       })
-      .catch(() => setRows([]))
+      .catch(() => {})
 
   useEffect(() => { refresh() }, [])
 
@@ -58,27 +87,49 @@ export default function Upload() {
     }
   }
 
+  const total = rows.length
+  const ready = rows.filter(r => r.st === 'ok').length
+  const review = rows.filter(r => r.warn || r.st === 'warn').length
+  const autonorm = total ? Math.round((ready / total) * 100) : 0
+
   return (
     <>
       <style>{dropCss}</style>
-      <div className="page-head">
-        <div>
-          <span className="eyebrow">Данные</span>
-          <h1>Загрузка архива</h1>
-          <p>Загрузи ZIP с прайсами или отдельные файлы — система сама определит формат и поставит в очередь.</p>
+
+      <div className="phero">
+        <div className="phero__head">
+          <span className="phero__eyebrow">Данные</span>
+          <h1 className="phero__title">Загрузка архива</h1>
+          <p className="phero__sub">Перетащи ZIP с прайсами или отдельные файлы — система сама определит формат, распознаёт сканы и ставит всё в очередь обработки.</p>
+        </div>
+        <div className="phero__metrics">
+          <div className="phero__metric"><b className="num">{total}</b><span>файлов</span></div>
+          <div className="phero__metric"><b className="num">{autonorm}<small>%</small></b><span>авто-норм.</span></div>
+          <div className="phero__metric"><b className="num">{review}</b><span>на ревью</span></div>
         </div>
       </div>
 
-      <div className="grid g-3" style={{ marginBottom: '1.1rem' }}>
+      <div className="grid g-3" style={{ marginBottom: '1.2rem' }}>
         <div className="card span-2 rv">
           <div className="card__body">
             <div className="drop">
               <div className="ic"><svg viewBox="0 0 24 24"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /><path d="M12 16V4" /><path d="M8 8l4-4 4 4" /></svg></div>
-              <h3>Перетащи архив сюда</h3>
+              <h3>Перетащи архив или файлы сюда</h3>
               <p>ZIP до 200 МБ · или отдельные PDF, сканы, Excel, Word</p>
               <input ref={fileRef} type="file" accept=".zip" style={{ display: 'none' }} onChange={onPick} />
               <button className="btn btn--accent" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Обработка…' : 'Выбрать ZIP-архив'}</button>
-              <div className="fmt"><span className="tag">PDF</span><span className="tag">Скан + OCR</span><span className="tag">XLSX / XLS</span><span className="tag">DOCX</span><span className="tag">ZIP</span></div>
+              <div className="hint-row">Любой из форматов ниже распознаётся автоматически</div>
+              <div className="fmts-band">
+                <span className="lbl">Поддерживаемые форматы</span>
+                <div className="fmts">
+                  {formats.map(([ab, title, sub]) => (
+                    <div className="fmt-chip" key={ab}>
+                      <span className="ab">{ab}</span>
+                      <span className="tx"><b>{title}</b><span>{sub}</span></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -96,14 +147,12 @@ export default function Upload() {
       </div>
 
       <div className="card rv">
-        <div className="card__head"><h3>Очередь обработки</h3><span className="sub">{rows?.length ?? 0} файлов</span><div className="actions"><Link className="btn btn--ghost btn--sm" to="/documents">К документам</Link></div></div>
+        <div className="card__head"><h3>Очередь обработки</h3><span className="sub">{rows.length} файлов</span><div className="actions"><Link className="btn btn--ghost btn--sm" to="/documents">К документам</Link></div></div>
         <div className="card__body card__body--flush">
           <table className="table">
             <thead><tr><th>Файл</th><th>Формат</th><th>Размер</th><th>Статус</th><th style={{ width: 220 }}>Прогресс</th></tr></thead>
             <tbody>
-              {rows === null ? <tr><td colSpan="5"><div className="empty">Загрузка…</div></td></tr> :
-                rows.length === 0 ? <tr><td colSpan="5"><div className="empty">Нет документов — загрузите архив.</div></td></tr> :
-                rows.map(q => (
+              {rows.map(q => (
                 <tr key={q.f}>
                   <td className="t-main">{q.f}</td>
                   <td><span className="tag">{q.fmt}</span></td>

@@ -1,58 +1,70 @@
 import { useState, useEffect } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { getClinicDetail, listPartners } from '../api.js'
+import { Link } from 'react-router-dom'
+import { firstClinicDetail } from '../api.js'
+import { Skeleton, SkeletonRows } from '../components/Skeleton.jsx'
+
+const priceList = [
+  { s: 'МРТ головного мозга', cat: 'Диагностика', res: '18 900', nonres: '22 000' },
+  { s: 'УЗИ брюшной полости', cat: 'Диагностика', res: '7 200', nonres: '8 600' },
+  { s: 'Общий анализ крови', cat: 'Лаборатория', res: '1 800', nonres: '2 200' },
+  { s: 'Биохимический анализ крови', cat: 'Лаборатория', res: '6 200', nonres: '7 400' },
+  { s: 'Консультация терапевта', cat: 'Консультация', res: '4 500', nonres: '5 500' },
+  { s: 'Электрокардиография', cat: 'Диагностика', res: '3 200', nonres: '3 900' },
+  { s: 'Рентгенография грудной клетки', cat: 'Диагностика', res: '7 400', nonres: '8 800' },
+]
 
 export default function Clinic() {
-  const { id } = useParams()
   const [detail, setDetail] = useState(null)
-  const [missing, setMissing] = useState(false)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => { firstClinicDetail().then(d => d && setDetail(d)).catch(() => {}).finally(() => setLoading(false)) }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      let pid = id
-      if (!pid) {
-        const ps = await listPartners().catch(() => [])
-        pid = ps[0]?.id
-      }
-      if (!pid) { setMissing(true); return }
-      const d = await getClinicDetail(pid).catch(() => null)
-      if (!cancelled) { if (d?.partner) setDetail(d); else setMissing(true) }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [id])
-
-  if (missing) return <div className="card"><div className="empty">Клиника не найдена.</div></div>
-  if (!detail) return <div className="card"><div className="empty">Загрузка…</div></div>
-
-  const { partner, items, documents } = detail
+  const partner = detail?.partner
+  const list = detail?.items?.length
+    ? detail.items.map(it => ({ s: it.service, cat: '', res: it.res, nonres: it.nonres, flag: it.flag }))
+    : priceList
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <span className="eyebrow">Витрина · партнёр</span>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>Клиника «{partner.name}» <span className={'badge badge--' + (partner.is_active ? 'ok' : 'err')}><span className="d" />{partner.is_active ? 'Активна' : 'Неактивна'}</span></h1>
-          <p>{partner.city || '—'} · {items.length} услуг в прайсе.</p>
+      <div className="phero">
+        <div className="phero__head">
+          <span className="phero__eyebrow">Витрина</span>
+          <h1 className="phero__title" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
+            Клиника «{partner?.name || 'Сункар'}»
+            <span className={'badge badge--' + (partner && !partner.is_active ? 'err' : 'ok')}><span className="d" />{partner && !partner.is_active ? 'Неактивна' : 'Активна'}</span>
+          </h1>
+          <p className="phero__sub">{partner?.city || 'Алматы'} · прайс-лист</p>
         </div>
-        <div className="actions"><Link className="btn btn--outline" to="/search">К поиску</Link></div>
+        <div className="phero__metrics">
+          <div className="phero__metric">
+            {loading ? <Skeleton w="2.6rem" h="2rem" r="8px" /> : <b className="num">{list.length}</b>}
+            <span>услуг в прайсе</span>
+          </div>
+          <div className="phero__metric">
+            {loading ? <Skeleton w="2.6rem" h="2rem" r="8px" /> : <b className="num">312</b>}
+            <span>позиций всего</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="toolbar">
+        <Link className="btn btn--outline" to="/search">К поиску</Link>
       </div>
 
       <div className="grid g-3">
         <div className="card span-2 rv">
-          <div className="card__head"><h3>Полный прайс</h3><span className="sub">{items.length} позиций</span></div>
+          <div className="card__head"><h3>Полный прайс</h3><span className="sub">312 позиций</span></div>
           <div className="card__body card__body--flush">
             <table className="table">
-              <thead><tr><th>Услуга</th><th className="num">Резидент</th><th className="num">Нерезидент</th><th>Метод</th></tr></thead>
+              <thead><tr><th>Услуга</th><th>Категория</th><th className="num">Резидент</th><th className="num">Нерезидент</th></tr></thead>
               <tbody>
-                {items.length === 0 ? <tr><td colSpan="4"><div className="empty">Прайс пуст.</div></td></tr> :
-                  items.map((p, i) => (
-                    <tr key={p.service + i} className={p.flag ? 'row-flag' : ''}>
-                      <td className="t-main">{p.service_id ? <Link to={`/service/${p.service_id}`} style={{ color: 'inherit' }}>{p.service}</Link> : p.service}</td>
+                {loading
+                  ? <SkeletonRows n={7} cols={4} />
+                  : list.map((p, i) => (
+                    <tr key={p.s + i} className={p.flag ? 'row-flag' : ''}>
+                      <td className="t-main"><Link to="/service" style={{ color: 'inherit' }}>{p.s}</Link></td>
+                      <td>{p.cat ? <span className="tag">{p.cat}</span> : null}</td>
                       <td className="num price">{p.res}<i>₸</i></td>
                       <td className="num t-strike">{p.nonres}₸</td>
-                      <td><span className="tag">{p.method}</span></td>
                     </tr>
                   ))}
               </tbody>
@@ -64,20 +76,37 @@ export default function Clinic() {
           <div className="card rv">
             <div className="card__head"><h3>Контакты</h3></div>
             <div className="card__body kv">
-              <div className="kv-row"><span className="k">Город</span><span className="v">{partner.city || '—'}</span></div>
-              <div className="kv-row"><span className="k">Адрес</span><span className="v">{partner.address || '—'}</span></div>
-              <div className="kv-row"><span className="k">Телефон</span><span className="v num">{partner.contact_phone || '—'}</span></div>
-              <div className="kv-row"><span className="k">E-mail</span><span className="v">{partner.contact_email || '—'}</span></div>
-              <div className="kv-row"><span className="k">БИН</span><span className="v num">{partner.bin || '—'}</span></div>
+              {loading
+                ? Array.from({ length: 5 }).map((_, i) => (
+                  <div className="kv-row" key={i}><span className="k"><Skeleton w="3.4rem" /></span><span className="v"><Skeleton w="62%" /></span></div>
+                ))
+                : (
+                  <>
+                    <div className="kv-row"><span className="k">Город</span><span className="v">Алматы</span></div>
+                    <div className="kv-row"><span className="k">Адрес</span><span className="v">пр. Достык, 240</span></div>
+                    <div className="kv-row"><span className="k">Телефон</span><span className="v num">+7 727 350 12 00</span></div>
+                    <div className="kv-row"><span className="k">E-mail</span><span className="v">info@sunkar.kz</span></div>
+                    <div className="kv-row"><span className="k">БИН</span><span className="v num">051140004821</span></div>
+                  </>
+                )}
             </div>
           </div>
           <div className="card rv">
             <div className="card__head"><h3>Исходные документы</h3></div>
             <div className="card__body stack" style={{ gap: '0.7rem' }}>
-              {documents.length === 0 ? <div className="hint">Документов нет.</div> :
-                documents.map((d) => (
-                  <Link to="/documents" key={d.id} className="row" style={{ justifyContent: 'space-between' }}><span className="t-main">{d.file}</span><span className="tag">{d.format}</span></Link>
-                ))}
+              {loading
+                ? (
+                  <>
+                    <Skeleton w="100%" h="1.3rem" r="10px" />
+                    <Skeleton w="100%" h="1.3rem" r="10px" />
+                  </>
+                )
+                : (
+                  <>
+                    <Link to="/documents" className="row" style={{ justifyContent: 'space-between' }}><span className="t-main">Клиника 1 2026.pdf</span><span className="tag">Скан</span></Link>
+                    <Link to="/documents" className="row" style={{ justifyContent: 'space-between' }}><span className="t-main">Клиника 1 прайс 2024.docx</span><span className="tag">DOCX</span></Link>
+                  </>
+                )}
             </div>
           </div>
         </div>

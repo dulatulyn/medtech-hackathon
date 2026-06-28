@@ -68,7 +68,7 @@ export default function AppLayout() {
     <ToastCtx.Provider value={push}>
       <div className="app">
         <aside className={'sidebar' + (open ? ' open' : '')}>
-          <div className="sb-brand"><span className="sb-mark" /><b>medarchive</b><span className="sb-role">Оператор</span></div>
+          <Link to="/dashboard" className="sb-brand" onClick={() => setOpen(false)}><span className="sb-mark" /><b>medarchive</b><span className="sb-role">Оператор</span></Link>
           {NAV.map(g => (
             <div className="sb-group" key={g.group}>
               <span>{g.group}</span>
@@ -85,7 +85,7 @@ export default function AppLayout() {
         <div className="main">
           <header className="topbar">
             <button className="btn btn--icon btn--ghost sb-toggle" onClick={() => setOpen(o => !o)} aria-label="Меню"><I.Menu /></button>
-            <div className="tb-search"><I.Search /><input id="globalSearch" placeholder="Найти услугу, клинику или документ…" onKeyDown={(e) => { if (e.key === 'Enter' && e.target.value.trim()) navigate(`/search?q=${encodeURIComponent(e.target.value.trim())}`) }} /><kbd>/</kbd></div>
+            <div className="tb-search"><I.Search /><input id="globalSearch" placeholder="Найти услугу, клинику или документ…" /><kbd>/</kbd></div>
             <div className="tb-right">
               <span
                 className="tb-chip"
@@ -97,7 +97,7 @@ export default function AppLayout() {
                 }}
               >
                 <span className="dot" style={{ background: api === 'live' ? 'var(--ok)' : 'var(--gray)' }} />
-                {api === 'live' ? `API подключено · ${stats.total_items} цен · ${stats.partners_active} клиник` : api === 'demo' ? 'Демо-данные (API офлайн)' : 'Проверка API…'}
+                {api === 'live' ? `API · ${stats.total_items} цен · ${stats.partners_active} клиник` : api === 'demo' ? 'Демо-данные (офлайн)' : 'Проверка…'}
               </span>
               <Link className="tb-chip tb-chip--verify" to="/verify"><span className="dot" />Верификация <b>{badge('/verify', 0)}</b></Link>
               <div className="tb-user">
