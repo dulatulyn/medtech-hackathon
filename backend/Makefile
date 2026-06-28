@@ -19,3 +19,17 @@ migrate-current:
 
 migrate-history:
 	uv run alembic history --verbose
+
+# Demo data: restore the pre-processed database snapshot (10 docs, prices,
+# normalization, anomalies, catalog embeddings + demo login operator/Operator123).
+# No OCR, no Azure, no pipeline — instant. Needs the medtech_db container running.
+restore-demo:
+	gunzip -c fixtures/demo_db.sql.gz | docker exec -i medtech_db psql -U med -d medarchive
+
+# Same, but against any Postgres via DB_* env vars (needs psql installed).
+restore-demo-psql:
+	gunzip -c fixtures/demo_db.sql.gz | PGPASSWORD=$(DB_PASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME)
+
+# Create the snapshot from the current DB (maintainers only).
+dump-demo:
+	docker exec medtech_db pg_dump -U med -d medarchive --no-owner --no-privileges --clean --if-exists | gzip > fixtures/demo_db.sql.gz

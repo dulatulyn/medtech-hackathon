@@ -45,7 +45,41 @@ medtech-hackathon/
 
 ---
 
-## Быстрый старт
+## Быстрый старт для проверки (без OCR и пайплайна) ⭐
+
+В репозитории лежит **готовый снимок базы** (`backend/fixtures/demo_db.sql.gz`): 10
+обработанных документов, 18k позиций с ценами, нормализация, аномалии, эмбеддинги
+каталога и демо-логин. Восстанавливается за секунды — **ничего не нужно распознавать
+через OCR, не нужны ключи Azure, не нужно гонять пайплайн.**
+
+```bash
+# 1. Поднять Postgres (pgvector) + Meilisearch
+docker run -d --name medtech_db -e POSTGRES_USER=med -e POSTGRES_PASSWORD=med \
+  -e POSTGRES_DB=medarchive -p 5544:5432 pgvector/pgvector:pg16
+docker run -d --name medtech_meili -e MEILI_MASTER_KEY=devmeilikey -p 7700:7700 getmeili/meilisearch:v1.10
+
+# 2. Восстановить готовые данные (instant)
+cd backend && make restore-demo
+
+# 3. Запустить бэкенд и фронт
+export DB_HOST=localhost DB_PORT=5544 DB_USER=med DB_PASSWORD=med DB_NAME=medarchive \
+       SECRET_KEY=devsecret MEILI_URL=http://localhost:7700 MEILI_KEY=devmeilikey \
+       COOKIE_SECURE=false COOKIE_SAMESITE=lax
+uv sync && uv run uvicorn src.main:app --port 8010
+# в другом терминале:
+cd ../frontend && npm install && VITE_API_TARGET=http://localhost:8010 npm run dev
+```
+
+Открыть **http://localhost:4321** → войти `operator` / `Operator123` → всё уже наполнено
+живыми данными. (Опционально для полнотекстового поиска: `make -C backend reindex`-эквивалент
+через `POST /api/v1/admin/reindex`.)
+
+> Полный прогон с нуля (импорт ZIP → OCR → нормализация) — ниже. Снимок пересоздаётся
+> командой `make dump-demo`.
+
+---
+
+## Запуск с нуля (полный пайплайн)
 
 Нужны: Docker, `uv` (Python), Node.js.
 
