@@ -52,6 +52,53 @@ async def list_documents(service: FromDishka[ImportService]):
     }
 
 
+@router.get("/documents/{doc_id}")
+@handle_service_errors
+async def get_document(
+    doc_id: str,
+    price_repo: FromDishka[PriceRepository],
+    catalog_repo: FromDishka[CatalogRepository],
+):
+    """Return one document's metadata plus its extracted price items (with matched service)."""
+    doc = await price_repo.get_document(doc_id)
+    if doc is None:
+        raise ValueError(f"document {doc_id} not found")
+    items = await price_repo.list_items_for_doc(doc_id)
+    names: dict[str, str] = {}
+    out_items = []
+    for it in items:
+        service_name = None
+        if it.service_id:
+            if it.service_id not in names:
+                svc = await catalog_repo.get_by_id(it.service_id)
+                names[it.service_id] = svc.name if svc else ""
+            service_name = names[it.service_id] or None
+        out_items.append({
+            "item_id": it.id,
+            "service_name_raw": it.service_name_raw,
+            "service_id": it.service_id,
+            "service_name": service_name,
+            "match_method": it.match_method.value,
+            "match_confidence": it.match_confidence,
+            "is_anomaly": it.is_anomaly,
+            "tariffs": [
+                {"tariff_type": t.tariff_type.value, "amount": float(t.amount), "currency": t.currency.value}
+                for t in it.tariffs
+            ],
+        })
+    return {
+        "id": doc.id,
+        "partner_id": doc.partner_id,
+        "file_name": doc.file_name,
+        "file_format": doc.file_format.value if hasattr(doc.file_format, "value") else doc.file_format,
+        "parse_status": doc.parse_status.value if hasattr(doc.parse_status, "value") else doc.parse_status,
+        "effective_date": str(doc.effective_date) if doc.effective_date else None,
+        "parse_log": doc.parse_log,
+        "item_count": len(out_items),
+        "items": out_items,
+    }
+
+
 @router.post("/documents/{doc_id}/parse")
 @handle_service_errors
 async def parse_document(doc_id: str, service: FromDishka[ParseService]):

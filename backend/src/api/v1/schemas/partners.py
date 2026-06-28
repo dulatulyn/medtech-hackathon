@@ -17,6 +17,7 @@ class PartnerOut(BaseModel):
     name: str
     city: str | None
     is_active: bool
+    address: str | None = None
     bin: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None

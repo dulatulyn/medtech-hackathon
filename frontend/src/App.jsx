@@ -25,7 +25,9 @@ export default function App() {
         <Route path="/anomalies" element={<Anomalies />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/clinic" element={<Clinic />} />
+        <Route path="/clinic/:id" element={<Clinic />} />
         <Route path="/service" element={<Service />} />
+        <Route path="/service/:id" element={<Service />} />
         <Route path="/catalog" element={<Catalog />} />
       </Route>
     </Routes>

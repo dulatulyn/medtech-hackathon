@@ -40,10 +40,14 @@ async def list_services(
     """List catalog services, optionally filtered by name query or category."""
     services = await catalog_repo.list_services(category=category, q=q, limit=limit, offset=offset)
     total = await catalog_repo.count_services(category=category)
-    return ServiceListOut(
-        items=[ServiceOut(id=s.id, name=s.name, category=s.category, icd_code=s.icd_code, is_active=s.is_active) for s in services],
-        total=total,
-    )
+    items = []
+    for s in services:
+        syns = sorted(await catalog_repo.get_synonym_texts(s.id))
+        items.append(ServiceOut(
+            id=s.id, name=s.name, category=s.category, icd_code=s.icd_code,
+            is_active=s.is_active, synonyms=syns,
+        ))
+    return ServiceListOut(items=items, total=total)
 
 
 @router.get("/{service_id}", response_model=ServiceOut)
@@ -53,7 +57,11 @@ async def get_service(service_id: str, catalog_repo: FromDishka[CatalogRepositor
     service = await catalog_repo.get_by_id(service_id)
     if service is None:
         raise ValueError(f"service {service_id} not found")
-    return ServiceOut(id=service.id, name=service.name, category=service.category, icd_code=service.icd_code, is_active=service.is_active)
+    syns = sorted(await catalog_repo.get_synonym_texts(service.id))
+    return ServiceOut(
+        id=service.id, name=service.name, category=service.category,
+        icd_code=service.icd_code, is_active=service.is_active, synonyms=syns,
+    )
 
 
 @router.get("/{service_id}/partners", response_model=ServicePartnersOut)

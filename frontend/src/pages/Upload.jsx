@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useToast } from '../components/AppLayout.jsx'
 import { uploadArchive, listDocuments } from '../api.js'
 
-const FMT = { xlsx: 'XLSX', xls: 'XLS', pdf: 'PDF', scan_pdf: 'Скан', docx: 'DOCX' }
 const ST = { ok: ['ok', 'Готово', 100], warn: ['warn', 'Нужно ревью', 100], info: ['info', 'Обработка', 64], pend: ['pend', 'В очереди', 0], err: ['err', 'Ошибка', 100] }
 
 const dropCss = `
@@ -16,15 +15,6 @@ const dropCss = `
 .fmt { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; margin-top: 1.3rem; }
 `
 
-const queue = [
-  { f: 'Клиника 6 прайс 2026.xlsx', fmt: 'XLSX', size: '538 КБ', st: 'ok', t: 'Готово', p: 100 },
-  { f: 'Клиника 2 прайс 2026.pdf', fmt: 'PDF', size: '809 КБ', st: 'ok', t: 'Готово', p: 100 },
-  { f: 'Клиника 7_Прайс 2026.xls', fmt: 'XLS', size: '920 КБ', st: 'info', t: 'Обработка · OCR', p: 64 },
-  { f: 'Клиника 3 прайс 2026.PDF', fmt: 'Скан', size: '1.2 МБ', st: 'warn', t: 'Нужно ревью', p: 100, warn: true },
-  { f: 'Клиника 1 2026.pdf', fmt: 'Скан', size: '3.7 МБ', st: 'ok', t: 'Готово', p: 100 },
-  { f: 'Клиника 4 прайс 2026.pdf', fmt: 'PDF', size: '1.2 МБ', st: 'pend', t: 'В очереди', p: 0 },
-]
-
 const steps = [
   ['Определение формата', 'текст / скан / таблица распознаются автоматически'],
   ['Извлечение', 'парсер под формат + OCR для сканов'],
@@ -35,21 +25,18 @@ const steps = [
 export default function Upload() {
   const toast = useToast()
   const fileRef = useRef(null)
-  const [rows, setRows] = useState(queue)
+  const [rows, setRows] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const refresh = () =>
     listDocuments()
       .then(docs => {
-        if (docs.length) {
-          const [, , ] = []
-          setRows(docs.slice(0, 20).map(d => {
-            const st = ST[d.status] || ST.info
-            return { f: d.file, fmt: FMT[d.format] || d.format, size: '—', st: st[0], t: d.parse_log || st[1], p: st[2], warn: d.status === 'warn' }
-          }))
-        }
+        setRows(docs.slice(0, 20).map(d => {
+          const st = ST[d.status] || ST.info
+          return { f: d.file, fmt: d.format, size: '—', st: st[0], t: d.parse_log || st[1], p: st[2], warn: d.status === 'warn' }
+        }))
       })
-      .catch(() => {})
+      .catch(() => setRows([]))
 
   useEffect(() => { refresh() }, [])
 
@@ -109,12 +96,14 @@ export default function Upload() {
       </div>
 
       <div className="card rv">
-        <div className="card__head"><h3>Очередь обработки</h3><span className="sub">{rows.length} файлов</span><div className="actions"><Link className="btn btn--ghost btn--sm" to="/documents">К документам</Link></div></div>
+        <div className="card__head"><h3>Очередь обработки</h3><span className="sub">{rows?.length ?? 0} файлов</span><div className="actions"><Link className="btn btn--ghost btn--sm" to="/documents">К документам</Link></div></div>
         <div className="card__body card__body--flush">
           <table className="table">
             <thead><tr><th>Файл</th><th>Формат</th><th>Размер</th><th>Статус</th><th style={{ width: 220 }}>Прогресс</th></tr></thead>
             <tbody>
-              {rows.map(q => (
+              {rows === null ? <tr><td colSpan="5"><div className="empty">Загрузка…</div></td></tr> :
+                rows.length === 0 ? <tr><td colSpan="5"><div className="empty">Нет документов — загрузите архив.</div></td></tr> :
+                rows.map(q => (
                 <tr key={q.f}>
                   <td className="t-main">{q.f}</td>
                   <td><span className="tag">{q.fmt}</span></td>

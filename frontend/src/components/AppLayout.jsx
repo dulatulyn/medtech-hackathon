@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext, useCallback } from 'react'
-import { NavLink, Link, Outlet } from 'react-router-dom'
+import { NavLink, Link, Outlet, useNavigate } from 'react-router-dom'
 import * as I from '../icons.jsx'
 import { getStats } from '../api.js'
 
@@ -26,6 +26,7 @@ export default function AppLayout() {
   const [toasts, setToasts] = useState([])
   const [stats, setStats] = useState(null)
   const [api, setApi] = useState('checking') // checking | live | demo
+  const navigate = useNavigate()
 
   useEffect(() => {
     getStats()
@@ -77,7 +78,7 @@ export default function AppLayout() {
         <div className="main">
           <header className="topbar">
             <button className="btn btn--icon btn--ghost sb-toggle" onClick={() => setOpen(o => !o)} aria-label="Меню"><I.Menu /></button>
-            <div className="tb-search"><I.Search /><input id="globalSearch" placeholder="Найти услугу, клинику или документ…" /><kbd>/</kbd></div>
+            <div className="tb-search"><I.Search /><input id="globalSearch" placeholder="Найти услугу, клинику или документ…" onKeyDown={(e) => { if (e.key === 'Enter' && e.target.value.trim()) navigate(`/search?q=${encodeURIComponent(e.target.value.trim())}`) }} /><kbd>/</kbd></div>
             <div className="tb-right">
               <span
                 className="tb-chip"

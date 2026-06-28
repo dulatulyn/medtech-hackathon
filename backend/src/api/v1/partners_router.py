@@ -38,7 +38,7 @@ async def list_partners(
     partners = partners[:limit]
     items = [
         PartnerOut(
-            id=p.id, name=p.name, city=p.city, is_active=p.is_active,
+            id=p.id, name=p.name, city=p.city, is_active=p.is_active, address=p.address,
             bin=p.bin, contact_email=p.contact_email, contact_phone=p.contact_phone,
         )
         for p in partners
@@ -55,7 +55,8 @@ async def get_partner(partner_id: str, partner_repo: FromDishka[PartnerRepositor
         raise ValueError(f"partner {partner_id} not found")
     return PartnerOut(
         id=partner.id, name=partner.name, city=partner.city, is_active=partner.is_active,
-        bin=partner.bin, contact_email=partner.contact_email, contact_phone=partner.contact_phone,
+        address=partner.address, bin=partner.bin,
+        contact_email=partner.contact_email, contact_phone=partner.contact_phone,
     )
 
 

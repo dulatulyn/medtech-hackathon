@@ -26,6 +26,7 @@ class ServiceOut(BaseModel):
     category: str | None
     icd_code: str | None
     is_active: bool
+    synonyms: list[str] = []
 
 
 class ServiceListOut(BaseModel):

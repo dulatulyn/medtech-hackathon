@@ -23,16 +23,16 @@ from src.repositories.catalog_repository import CatalogRepository
 from src.repositories.partner_repository import PartnerRepository
 from src.repositories.price_repository import PriceRepository
 
-# (name, city, active)
+# (name, city, active, address, phone, email, bin)
 _CLINICS = [
-    ("Сункар", "Алматы", True),
-    ("Жетысу", "Алматы", True),
-    ("Арман", "Шымкент", True),
-    ("Нур", "Астана", True),
-    ("Сенім", "Караганда", True),
-    ("Аман", "Алматы", True),
-    ("Береке", "Астана", False),
-    ("Демеу", "Шымкент", True),
+    ("Сункар", "Алматы", True, "пр. Достык, 240", "+7 727 350 12 00", "info@sunkar.kz", "051140004821"),
+    ("Жетысу", "Алматы", True, "ул. Абая, 150", "+7 727 311 45 67", "clinic@zhetysu.kz", "060240003712"),
+    ("Арман", "Шымкент", True, "пр. Тауке хана, 21", "+7 7252 53 21 09", "reg@arman-med.kz", "071040008190"),
+    ("Нур", "Астана", True, "пр. Кабанбай батыра, 53", "+7 7172 24 88 10", "info@nurclinic.kz", "080540002345"),
+    ("Сенім", "Караганда", True, "ул. Ерубаева, 39", "+7 7212 41 60 33", "senim@mail.kz", "090340007654"),
+    ("Аман", "Алматы", True, "мкр. Самал-2, 58", "+7 727 264 70 21", "aman@aman.kz", "100140001298"),
+    ("Береке", "Астана", False, "ул. Сарыарка, 12", "+7 7172 50 33 18", "bereke@bereke.kz", "110540006677"),
+    ("Демеу", "Шымкент", True, "ул. Желтоксан, 7", "+7 7252 99 14 02", "demeu@demeu.kz", "120340004411"),
 ]
 
 # (name, category, synonyms, base_resident_price)
@@ -59,16 +59,36 @@ _UNMATCHED = [
 _CLINIC_FACTOR = [0.84, 1.08, 1.38, 1.18, 0.90, 1.02, 1.0, 1.15]
 
 
+async def _wipe(session: AsyncSession) -> None:
+    """Clear domain tables (FK-safe order) so re-seeding gives a clean demo state.
+
+    Only touches the price/catalog/partner domain — never auth/users.
+    """
+    from sqlalchemy import text
+
+    for table in (
+        "price_tariffs", "price_items", "price_documents",
+        "service_synonyms", "services", "partners",
+    ):
+        await session.execute(text(f"DELETE FROM {table}"))
+    await session.flush()
+
+
 async def seed_demo(session: AsyncSession) -> dict[str, int]:
     """Insert demo clinics, services, and matched price items. Returns counts."""
     partners = PartnerRepository(session)
     catalog = CatalogRepository(session)
     prices = PriceRepository(session)
 
+    await _wipe(session)
+
     partner_ids: list[str] = []
-    for name, city, active in _CLINICS:
-        p = await partners.create(name=name, city=city)
+    for name, city, active, address, phone, email, bin_ in _CLINICS:
+        p = await partners.create(name=name, city=city, bin=bin_)
         p.is_active = active
+        p.address = address
+        p.contact_phone = phone
+        p.contact_email = email
         partner_ids.append(p.id)
 
     service_ids: list[str] = []
@@ -80,9 +100,11 @@ async def seed_demo(session: AsyncSession) -> dict[str, int]:
     await session.flush()
 
     eff = date(2026, 1, 1)
-    items = anomalies = unmatched = 0
+    eff_old = date(2024, 1, 1)
+    items = anomalies = unmatched = archived = 0
 
-    # One document per clinic; matched items with resident + far_abroad tariffs.
+    # Two documents per clinic (2024 archived + 2026 active) to demonstrate price
+    # history/versioning; matched items carry resident + far_abroad tariffs.
     for ci, pid in enumerate(partner_ids):
         status = ParseStatus.done if ci != 6 else ParseStatus.needs_review
         doc = await prices.create_document(
@@ -94,6 +116,15 @@ async def seed_demo(session: AsyncSession) -> dict[str, int]:
         )
         doc.parse_status = status
         doc.parse_log = "seeded"
+        doc_old = await prices.create_document(
+            partner_id=pid,
+            file_name=f"{_CLINICS[ci][0]} прайс 2024.xlsx",
+            file_format=FileFormat.xlsx,
+            object_key=f"seed/{ci}_2024.xlsx",
+            effective_date=eff_old,
+        )
+        doc_old.parse_status = ParseStatus.done
+        doc_old.parse_log = "seeded"
         factor = _CLINIC_FACTOR[ci]
 
         for si, (sname, _, _, base) in enumerate(_SERVICES):
@@ -110,11 +141,26 @@ async def seed_demo(session: AsyncSession) -> dict[str, int]:
             await prices.add_tariff(item.id, resident, TariffType.resident)
             await prices.add_tariff(item.id, resident * Decimal("1.15"), TariffType.far_abroad)
             items += 1
-            # flag clear outliers as anomalies
-            if factor >= 1.35:
-                await prices.set_anomaly(
-                    item.id, f"Цена выше медианы рынка (+{int((factor - 1) * 100)}%)"
-                )
+
+            # archived 2024 version (price-history + versioning demo). High-factor
+            # clinics get a steep 2024→2026 jump that trips the >50% anomaly rule.
+            is_outlier = factor >= 1.35
+            old_mult = Decimal("0.60") if is_outlier else Decimal("0.82")
+            resident_old = (resident * old_mult).quantize(Decimal("1"))
+            old_item = await prices.add_item(
+                doc_id=doc_old.id, partner_id=pid, service_name_raw=sname,
+                provenance={"sheet": "Прайс", "row": si + 2, "source": "seed"},
+                effective_date=eff_old,
+            )
+            await prices.update_item_match(old_item.id, service_ids[si], MatchMethod.exact, 0.99)
+            await prices.add_tariff(old_item.id, resident_old, TariffType.resident)
+            old_item.is_active = False
+            old_item.superseded_by = item.id
+            archived += 1
+
+            if is_outlier:
+                pct = int((resident / resident_old - 1) * 100)
+                await prices.set_anomaly(item.id, f"resident: {resident_old}→{resident} ({pct}%)")
                 anomalies += 1
 
         # a couple of unmatched raw items per relevant clinic
@@ -132,6 +178,7 @@ async def seed_demo(session: AsyncSession) -> dict[str, int]:
         "clinics": len(partner_ids),
         "services": len(service_ids),
         "items": items,
+        "archived": archived,
         "anomalies": anomalies,
         "unmatched": unmatched,
     }

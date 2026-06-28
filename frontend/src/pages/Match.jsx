@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { unmatched } from '../data.js'
 import { useToast } from '../components/AppLayout.jsx'
 import { listUnmatched, searchServices, matchItem } from '../api.js'
 import * as I from '../icons.jsx'
@@ -96,10 +95,10 @@ function MatchCard({ it, onResolved }) {
 }
 
 export default function Match() {
-  const [items, setItems] = useState(unmatched)
+  const [items, setItems] = useState(null)
 
   useEffect(() => {
-    listUnmatched().then(d => { if (d.length) setItems(d) }).catch(() => {})
+    listUnmatched().then(setItems).catch(() => setItems([]))
   }, [])
 
   const resolve = id => setItems(x => x.filter(i => i.id !== id))
@@ -112,10 +111,12 @@ export default function Match() {
           <h1>Несопоставленное</h1>
           <p>Позиции ниже порога уверенности. Выбери услугу из справочника или создай новую.</p>
         </div>
-        <div className="actions"><span className="badge badge--accent">{items.length} в очереди</span></div>
+        <div className="actions"><span className="badge badge--accent">{items?.length ?? 0} в очереди</span></div>
       </div>
 
-      {items.length === 0 ? (
+      {items === null ? (
+        <div className="card"><div className="empty">Загрузка…</div></div>
+      ) : items.length === 0 ? (
         <div className="card"><div className="empty"><b style={{ fontSize: '1.1rem' }}>Всё сопоставлено 🎉</b></div></div>
       ) : (
         <div className="stack">
