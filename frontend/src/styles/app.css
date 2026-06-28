@@ -294,6 +294,10 @@ a.btn--outline, a.btn--ghost { color: var(--ink); }
 .t-strike { color: var(--gray-2); text-decoration: line-through; font-size: 0.84rem; }
 .row-best { background: linear-gradient(90deg, var(--ok-bg), transparent 60%); }
 .row-flag td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.row-click { cursor: pointer; transition: background 0.12s; }
+.row-click:hover { background: var(--surface-2); }
+.row-on { background: var(--accent-weak); }
+.row-on td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .cell { display: flex; align-items: center; gap: 0.65rem; }
 .cell .logo { width: 32px; height: 32px; border-radius: 10px; background: #edece8; flex: none; display: grid; place-items: center; color: var(--gray-2); font-size: 0.72rem; font-weight: 600; }
 

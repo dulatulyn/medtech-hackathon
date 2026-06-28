@@ -84,6 +84,50 @@ export async function listDocuments() {
   })
 }
 
+// One document's full detail: metadata + extracted rows (with match result) + a
+// processing log derived from the real items. Powers the Documents drill-in panel.
+export async function getDocument(id) {
+  const [d, pmap] = await Promise.all([get(`/admin/documents/${id}`), partnerMap()])
+  const p = pmap.get(d.partner_id)
+  // Keep only real price lines — drop header/section rows that carry no price.
+  const items = (d.items || []).filter((i) => resident(i.tariffs) != null || nonresident(i.tariffs) != null)
+  const matched = items.filter((i) => i.service_id).length
+  const lowconf = items.filter((i) => i.service_id && i.match_confidence != null && i.match_confidence < 0.85).length
+  const unmatched = items.length - matched
+  const anomalies = items.filter((i) => i.is_anomaly).length
+  const rows = items.map((it) => {
+    const base = { raw: it.service_name_raw, res: fmt(resident(it.tariffs)), nonres: fmt(nonresident(it.tariffs)) }
+    if (!it.service_id) return { ...base, match: 'err', label: 'не сопоставлено', flag: true, rank: 2 }
+    if (it.match_confidence != null && it.match_confidence < 0.85)
+      return { ...base, match: 'warn', label: `уверенность ${Math.round(it.match_confidence * 100)}%`, flag: true, rank: 1 }
+    return { ...base, match: 'ok', label: it.service_name || 'сопоставлено', flag: it.is_anomaly, rank: 0 }
+  })
+  rows.sort((a, b) => a.rank - b.rank) // matched services first — cleanest for the operator view
+  const fmtName = { xlsx: 'XLSX', xls: 'XLS', pdf: 'PDF', scan_pdf: 'scan_pdf · OCR', docx: 'DOCX' }
+  const pct = items.length ? Math.round((matched / items.length) * 100) : 0
+  const log = [{ lvl: 'ok', text: `Извлечено ${d.item_count} позиций` }, { lvl: 'ok', text: `Сопоставлено ${matched} (${pct}%)` }]
+  if (lowconf) log.push({ lvl: 'warn', text: `${lowconf} ниже порога уверенности` })
+  if (anomalies) log.push({ lvl: 'warn', text: `${anomalies} аномалий цен отмечено` })
+  if (unmatched) log.push({ lvl: 'err', text: `${unmatched} не сопоставлено` })
+  return {
+    id: d.id,
+    file: d.file_name,
+    clinic: p?.name || '—',
+    city: p?.city || '',
+    status: STATUS[d.parse_status] || 'info',
+    count: d.item_count,
+    meta: {
+      partner: `${p?.name || '—'}${p?.city ? ' · ' + p.city : ''}`,
+      format: fmtName[d.file_format] || d.file_format,
+      extracted: d.item_count,
+      date: d.effective_date || '—',
+    },
+    stats: { matched, unmatched, lowconf, anomalies },
+    rows,
+    log,
+  }
+}
+
 export async function listCatalog() {
   const d = await get('/services?limit=200')
   const services = d.items || []

@@ -1,29 +1,53 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { documents, statusLabel } from '../data.js'
-import { listDocuments } from '../api.js'
+import { listDocuments, getDocument } from '../api.js'
 import { Skeleton, SkeletonRows } from '../components/Skeleton.jsx'
 
-const chips = ['Все · 10', 'Готово · 7', 'На ревью · 1', 'Обработка · 1', 'В очереди · 1']
-
-const detailRows = [
-  { raw: 'МРТ головн. мозга', res: '31 200', nonres: '35 000', match: 'ok', label: 'МРТ головного мозга' },
-  { raw: 'ОАК (5 параметров)', res: '2 400', nonres: '3 000', match: 'ok', label: 'Общий анализ крови' },
-  { raw: 'Консульт. невропат.', res: '8 500', nonres: '10 000', match: 'warn', label: 'уверенность 64%', flag: true },
-  { raw: 'Глюкоза кр. натощак', res: '1 900', nonres: '2 300', match: 'err', label: 'не сопоставлено', flag: true },
-]
+const MAX_ROWS = 60 // documents can hold thousands of items — cap the drill-in table
 
 export default function Documents() {
   const [active, setActive] = useState(0)
   const [docs, setDocs] = useState(documents)
   const [loading, setLoading] = useState(true)
+  const [sel, setSel] = useState(null)
+  const [detail, setDetail] = useState(null)
+  const [dLoading, setDLoading] = useState(false)
+
   useEffect(() => {
-    listDocuments().then(d => { if (d.length) setDocs(d) }).catch(() => {}).finally(() => setLoading(false))
+    listDocuments().then(d => {
+      if (d.length) {
+        setDocs(d)
+        // default-select a document that has something to show (prefer one on review)
+        const pick = d.find(x => x.status === 'warn') || d.find(x => x.status === 'ok') || d[0]
+        if (pick) setSel(pick.id)
+      }
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!sel) return
+    setDLoading(true)
+    getDocument(sel).then(setDetail).catch(() => setDetail(null)).finally(() => setDLoading(false))
+  }, [sel])
 
   const total = docs.length
   const ready = docs.filter(d => d.status === 'ok').length
   const extracted = docs.reduce((s, d) => s + (d.items || 0), 0)
+
+  const chips = useMemo(() => {
+    const by = s => docs.filter(d => d.status === s).length
+    return [
+      { t: `Все · ${total}`, f: null },
+      { t: `Готово · ${ready}`, f: 'ok' },
+      { t: `На ревью · ${by('warn')}`, f: 'warn' },
+      { t: `Обработка · ${by('info')}`, f: 'info' },
+      { t: `В очереди · ${by('pend')}`, f: 'pend' },
+    ]
+  }, [docs, total, ready])
+
+  const filter = chips[active]?.f
+  const visible = filter ? docs.filter(d => d.status === filter) : docs
 
   return (
     <>
@@ -31,7 +55,7 @@ export default function Documents() {
         <div className="phero__head">
           <span className="phero__eyebrow">Данные</span>
           <h1 className="phero__title">Документы</h1>
-          <p className="phero__sub">Прайс-документы партнёров.</p>
+          <p className="phero__sub">Прайс-документы партнёров — кликни строку, чтобы увидеть извлечённые позиции и лог обработки.</p>
         </div>
         <div className="phero__metrics">
           <div className="phero__metric"><b className="num">{loading ? <Skeleton w={56} h="2rem" r="10px" /> : total}</b><span>документов</span></div>
@@ -43,7 +67,7 @@ export default function Documents() {
       <div className="toolbar">
         <div className="chips">
           {chips.map((c, i) => (
-            <button className={'chip' + (i === active ? ' on' : '')} key={c} onClick={() => setActive(i)}>{c}</button>
+            <button className={'chip' + (i === active ? ' on' : '')} key={c.t} onClick={() => setActive(i)}>{c.t}</button>
           ))}
         </div>
         <Link className="btn btn--accent" to="/upload" style={{ marginLeft: 'auto' }}>Загрузить ещё</Link>
@@ -52,7 +76,7 @@ export default function Documents() {
       <div className="card rv" style={{ marginBottom: '1.2rem' }}>
         <div className="card__head">
           <h3>Все документы</h3>
-          <span className="sub">{loading ? <Skeleton w={70} h={12} /> : `${total} файлов`}</span>
+          <span className="sub">{loading ? <Skeleton w={70} h={12} /> : `${visible.length} файлов`}</span>
         </div>
         <div className="card__body card__body--flush">
           <table className="table">
@@ -60,10 +84,10 @@ export default function Documents() {
             <tbody>
               {loading
                 ? <SkeletonRows n={8} cols={6} />
-                : docs.map(d => {
+                : visible.map(d => {
                   const m = statusLabel[d.status]
                   return (
-                    <tr key={d.id || d.file}>
+                    <tr key={d.id || d.file} className={'row-click' + (d.id === sel ? ' row-on' : '')} onClick={() => d.id && setSel(d.id)}>
                       <td className="t-main">{d.file}</td>
                       <td>{d.clinic} · {d.city}</td>
                       <td><span className="tag">{d.format}</span></td>
@@ -81,19 +105,22 @@ export default function Documents() {
       <div className="grid g-3">
         <div className="card span-2 rv">
           <div className="card__head">
-            <h3>Клиника 3 прайс 2026.PDF</h3>
-            <span className="badge badge--warn"><span className="d" />На ревью</span>
-            <span className="sub">Арман · Шымкент</span>
-            <div className="actions"><button className="btn btn--outline btn--sm">Переобработать</button></div>
+            <h3>{detail?.file || 'Выберите документ'}</h3>
+            {detail && <span className={'badge badge--' + detail.status}><span className="d" />{statusLabel[detail.status]?.t}</span>}
+            {detail && <span className="sub">{detail.clinic} · {detail.city}</span>}
           </div>
           <div className="card__body card__body--flush">
             <table className="table">
               <thead><tr><th>Услуга (как в документе)</th><th>Резидент</th><th>Нерезидент</th><th>Сопоставление</th></tr></thead>
               <tbody>
-                {loading
-                  ? <SkeletonRows n={4} cols={4} />
-                  : detailRows.map(r => (
-                    <tr key={r.raw} className={r.flag ? 'row-flag' : ''}>
+                {dLoading
+                  ? <SkeletonRows n={6} cols={4} />
+                  : !detail ? (
+                    <tr><td colSpan={4}><div className="empty">Кликните документ в таблице выше.</div></td></tr>
+                  ) : detail.rows.length === 0 ? (
+                    <tr><td colSpan={4}><div className="empty">Позиции ещё не извлечены.</div></td></tr>
+                  ) : detail.rows.slice(0, MAX_ROWS).map((r, i) => (
+                    <tr key={i} className={r.flag ? 'row-flag' : ''}>
                       <td className="t-main">{r.raw}</td>
                       <td className="num price">{r.res}<i>₸</i></td>
                       <td className="num price">{r.nonres}<i>₸</i></td>
@@ -102,6 +129,9 @@ export default function Documents() {
                   ))}
               </tbody>
             </table>
+            {detail && detail.rows.length > MAX_ROWS && (
+              <div className="hint" style={{ padding: '0.7rem 1rem' }}>Показаны первые {MAX_ROWS} из {detail.rows.length} позиций.</div>
+            )}
           </div>
         </div>
 
@@ -109,16 +139,16 @@ export default function Documents() {
           <div className="card rv">
             <div className="card__head"><h3>Метаданные</h3></div>
             <div className="card__body kv">
-              {loading
+              {dLoading || !detail
                 ? Array.from({ length: 4 }).map((_, i) => (
                   <div className="kv-row" key={i}><Skeleton w={90} h={12} /><Skeleton w={120} h={12} /></div>
                 ))
                 : (
                   <>
-                    <div className="kv-row"><span className="k">Партнёр</span><span className="v">Арман · Шымкент</span></div>
-                    <div className="kv-row"><span className="k">Формат</span><span className="v">scan_pdf · OCR</span></div>
-                    <div className="kv-row"><span className="k">Извлечено</span><span className="v num">280 позиций</span></div>
-                    <div className="kv-row"><span className="k">Дата прайса</span><span className="v">01.01.2026</span></div>
+                    <div className="kv-row"><span className="k">Партнёр</span><span className="v">{detail.meta.partner}</span></div>
+                    <div className="kv-row"><span className="k">Формат</span><span className="v">{detail.meta.format}</span></div>
+                    <div className="kv-row"><span className="k">Извлечено</span><span className="v num">{detail.meta.extracted} позиций</span></div>
+                    <div className="kv-row"><span className="k">Дата прайса</span><span className="v">{detail.meta.date}</span></div>
                   </>
                 )}
             </div>
@@ -130,35 +160,22 @@ export default function Documents() {
               <span className="badge badge--info"><span className="d" />Активная</span>
             </div>
             <div className="card__body kv">
-              {loading
-                ? Array.from({ length: 3 }).map((_, i) => (
-                  <div className="kv-row" key={i}><Skeleton w={100} h={12} /><Skeleton w={90} h={12} /></div>
-                ))
-                : (
-                  <>
-                    <div className="kv-row"><span className="k">Текущая версия</span><span className="v num">2026</span></div>
-                    <div className="kv-row"><span className="k">Предыдущие</span><span className="v">в архиве</span></div>
-                    <div className="kv-row"><span className="k">Срок хранения</span><span className="v">бессрочно</span></div>
-                  </>
-                )}
+              <div className="kv-row"><span className="k">Текущая версия</span><span className="v num">{detail?.meta.date?.slice(0, 4) || '2026'}</span></div>
+              <div className="kv-row"><span className="k">Предыдущие</span><span className="v">в архиве</span></div>
+              <div className="kv-row"><span className="k">Срок хранения</span><span className="v">бессрочно</span></div>
             </div>
           </div>
 
           <div className="card rv">
             <div className="card__head"><h3>Лог обработки</h3></div>
             <div className="card__body stack" style={{ gap: '0.6rem' }}>
-              {loading
+              {dLoading || !detail
                 ? Array.from({ length: 4 }).map((_, i) => (
                   <div className="row" key={i} style={{ gap: '0.5rem' }}><Skeleton w={14} h={14} r="50%" /><Skeleton w="70%" h={12} /></div>
                 ))
-                : (
-                  <>
-                    <div className="row" style={{ gap: '0.5rem' }}><span className="badge badge--ok"><span className="d" /></span><span className="hint">OCR: 280 строк распознано</span></div>
-                    <div className="row" style={{ gap: '0.5rem' }}><span className="badge badge--warn"><span className="d" /></span><span className="hint">12 позиций ниже порога уверенности</span></div>
-                    <div className="row" style={{ gap: '0.5rem' }}><span className="badge badge--warn"><span className="d" /></span><span className="hint">МРТ мозга: +38% к медиане</span></div>
-                    <div className="row" style={{ gap: '0.5rem' }}><span className="badge badge--err"><span className="d" /></span><span className="hint">4 позиции не сопоставлены</span></div>
-                  </>
-                )}
+                : detail.log.map((l, i) => (
+                  <div className="row" key={i} style={{ gap: '0.5rem' }}><span className={'badge badge--' + l.lvl}><span className="d" /></span><span className="hint">{l.text}</span></div>
+                ))}
             </div>
           </div>
         </div>
