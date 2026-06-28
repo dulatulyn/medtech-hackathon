@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from src.core.logging import get_logger
-from src.enums import ParseStatus
+from src.enums import Currency, ParseStatus
+from src.integrations.fx import FxConverter, StaticFxConverter
 from src.integrations.ocr import OcrNotConfiguredError, OcrProvider
 from src.integrations.storage import ObjectStorage
 from src.parsers.dispatch import parse_bytes
@@ -16,10 +17,14 @@ _SCAN_REQUIRES_OCR = "scan_requires_ocr"
 class ParseService:
     """Turns a pending price document into persisted price items + tariffs."""
 
-    def __init__(self, prices: PriceRepository, storage: ObjectStorage, ocr: OcrProvider):
+    def __init__(
+        self, prices: PriceRepository, storage: ObjectStorage, ocr: OcrProvider,
+        fx: FxConverter | None = None,
+    ):
         self.prices = prices
         self.storage = storage
         self.ocr = ocr
+        self.fx = fx or StaticFxConverter()
 
     async def parse_document(self, doc_id: str) -> int:
         """Parse one document; persist rows; set status; return row count."""
@@ -50,7 +55,7 @@ class ParseService:
                     effective_date=doc.effective_date,
                 )
                 for tariff in raw.tariffs:
-                    await self.prices.add_tariff(item.id, tariff.amount, tariff.tariff_type)
+                    await self._persist_tariff(item.id, tariff, doc.effective_date)
 
             doc.parse_status = ParseStatus.done if result.rows else ParseStatus.needs_review
             doc.parse_log = "; ".join(result.warnings) if result.warnings else f"{len(result.rows)} rows"
@@ -61,6 +66,25 @@ class ParseService:
             doc.parse_log = f"{type(exc).__name__}: {exc}"
             logger.error("document_parse_failed", doc_id=doc.id, error=str(exc))
             raise
+
+    async def _persist_tariff(self, item_id: str, tariff, on_date):
+        """Persist a tariff, converting non-KZT amounts to KZT and keeping the original.
+
+        ТЗ 4.4: «Валюта не KZT → конвертировать по курсу на дату прайса, сохранить оригинал».
+        """
+        currency = getattr(tariff, "currency", Currency.KZT)
+        if currency == Currency.KZT:
+            await self.prices.add_tariff(item_id, tariff.amount, tariff.tariff_type)
+            return
+        kzt = self.fx.to_kzt(tariff.amount, currency, on_date)
+        logger.info(
+            "tariff_currency_converted",
+            currency=currency.value, original=str(tariff.amount), kzt=str(kzt),
+        )
+        await self.prices.add_tariff(
+            item_id, kzt, tariff.tariff_type,
+            currency=currency, original_amount=tariff.amount,
+        )
 
     async def _try_ocr(self, doc, data: bytes, result):
         """Route a text-less scan through the OCR provider when one is configured.

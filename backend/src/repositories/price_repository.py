@@ -48,10 +48,13 @@ class PriceRepository:
 
     async def add_tariff(
         self, item_id: str, amount: Decimal, tariff_type: TariffType = TariffType.default,
-        currency: Currency = Currency.KZT,
+        currency: Currency = Currency.KZT, original_amount: Decimal | None = None,
     ) -> PriceTariff:
-        """Attach a tariff amount to a price item."""
-        tariff = PriceTariff(item_id=item_id, amount=amount, tariff_type=tariff_type, currency=currency)
+        """Attach a tariff amount to a price item (amount in KZT; original kept if converted)."""
+        tariff = PriceTariff(
+            item_id=item_id, amount=amount, tariff_type=tariff_type,
+            currency=currency, original_amount=original_amount,
+        )
         self.session.add(tariff)
         await self.session.flush()
         return tariff

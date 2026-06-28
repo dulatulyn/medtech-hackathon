@@ -15,6 +15,27 @@ _CURRENCY = re.compile(r"(тенге|тг|₸|kzt|руб\.?|rub|usd|\$|сом)",
 _NBSP = " "
 
 
+_CURRENCY_TOKENS = (
+    (re.compile(r"(usd|\$|долл)", re.IGNORECASE), "USD"),
+    (re.compile(r"(руб\.?|rub|₽)", re.IGNORECASE), "RUB"),
+)
+
+
+def detect_currency(raw) -> str:
+    """Detect the source currency of a raw price cell; default 'KZT'.
+
+    Returns a Currency enum *name* (str) so parsers stay decoupled from the enum import.
+    Numbers carry no symbol, so they default to KZT — matching the archive.
+    """
+    if raw is None or isinstance(raw, (int, float, Decimal)):
+        return "KZT"
+    text = str(raw)
+    for pattern, code in _CURRENCY_TOKENS:
+        if pattern.search(text):
+            return code
+    return "KZT"
+
+
 def clean_price(raw) -> Decimal | None:
     """Parse a price from a noisy cell into a positive Decimal, or None."""
     if raw is None:

@@ -5,17 +5,18 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Protocol
 
-from src.enums import TariffType
-from src.parsers.cleaning import clean_price, normalize_ws
+from src.enums import Currency, TariffType
+from src.parsers.cleaning import clean_price, detect_currency, normalize_ws
 from src.parsers.columns import ColumnMap
 
 
 @dataclass
 class RawTariff:
-    """One extracted price under a tariff tier."""
+    """One extracted price under a tariff tier, with its source currency."""
 
     tariff_type: TariffType
     amount: Decimal
+    currency: Currency = Currency.KZT
 
 
 @dataclass
@@ -55,9 +56,11 @@ def row_to_rawrow(cells: list, cmap: ColumnMap, provenance: dict) -> RawRow | No
 
     tariffs: list[RawTariff] = []
     for col, tariff_type in cmap.prices:
-        amount = clean_price(cell(col))
+        raw_cell = cell(col)
+        amount = clean_price(raw_cell)
         if amount is not None:
-            tariffs.append(RawTariff(tariff_type, amount))
+            currency = Currency[detect_currency(raw_cell)]
+            tariffs.append(RawTariff(tariff_type, amount, currency))
     if not tariffs:
         return None  # section/title row with no price
 
