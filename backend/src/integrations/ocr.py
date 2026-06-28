@@ -3,6 +3,10 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from src.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class OcrNotConfiguredError(RuntimeError):
     """Raised when OCR is requested but no provider is configured."""
@@ -31,6 +35,53 @@ class NoOpOcrProvider:
     async def extract_text(self, data: bytes) -> str:
         """Refuse: no OCR backend available."""
         raise OcrNotConfiguredError("no OCR provider configured")
+
+
+class CachingOcrProvider:
+    """Wraps an OCR provider and caches results on disk by file content hash.
+
+    A given scan is sent to the (paid, slow) OCR backend exactly once — ever.
+    Keyed by sha256 of the file bytes, so the cache survives DB wipes, re-imports
+    and restarts: same file → cached text, no network call.
+    """
+
+    name = "caching"
+
+    def __init__(self, inner: "OcrProvider", cache_dir: str):
+        import os
+
+        self.inner = inner
+        self.cache_dir = os.path.join(cache_dir, ".ocr_cache")
+        os.makedirs(self.cache_dir, exist_ok=True)
+
+    @property
+    def is_configured(self) -> bool:
+        """Configured when the wrapped provider is."""
+        return self.inner.is_configured
+
+    def _path(self, data: bytes) -> str:
+        import hashlib
+        import os
+
+        digest = hashlib.sha256(data).hexdigest()
+        return os.path.join(self.cache_dir, f"{digest}.txt")
+
+    async def extract_text(self, data: bytes) -> str:
+        """Return cached OCR text if present; otherwise run OCR once and cache it."""
+        import asyncio
+        import os
+
+        path = self._path(data)
+        if os.path.exists(path):
+            text = await asyncio.to_thread(lambda: open(path, encoding="utf-8").read())
+            logger.info("ocr_cache_hit", chars=len(text))
+            return text
+
+        text = await self.inner.extract_text(data)
+        if text and text.strip():
+            await asyncio.to_thread(lambda: open(path, "w", encoding="utf-8").write(text))
+            logger.info("ocr_cache_store", chars=len(text))
+        return text
 
 
 class AzureOcrProvider:

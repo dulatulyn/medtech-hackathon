@@ -3,10 +3,42 @@ import pytest
 
 from src.integrations.ocr import (
     AzureOcrProvider,
+    CachingOcrProvider,
     NoOpOcrProvider,
     OcrNotConfiguredError,
     OcrProvider,
 )
+
+
+class _CountingOcr:
+    """Inner OCR stub that counts how many times it actually runs."""
+
+    calls = 0
+    is_configured = True
+
+    async def extract_text(self, data: bytes) -> str:
+        self.calls += 1
+        return f"text for {len(data)} bytes"
+
+
+@pytest.mark.asyncio
+async def test_caching_runs_ocr_once_then_serves_from_cache(tmp_path):
+    inner = _CountingOcr()
+    provider = CachingOcrProvider(inner, str(tmp_path))
+    first = await provider.extract_text(b"scan-bytes")
+    second = await provider.extract_text(b"scan-bytes")  # same file → cache hit
+    assert first == second
+    assert inner.calls == 1  # OCR backend hit exactly once
+
+
+@pytest.mark.asyncio
+async def test_caching_survives_new_instance(tmp_path):
+    """A fresh provider (after restart/wipe) still reads the on-disk cache."""
+    inner1 = _CountingOcr()
+    await CachingOcrProvider(inner1, str(tmp_path)).extract_text(b"scan")
+    inner2 = _CountingOcr()
+    await CachingOcrProvider(inner2, str(tmp_path)).extract_text(b"scan")
+    assert inner2.calls == 0  # served from disk cache, no OCR call
 
 
 def test_noop_is_not_configured():

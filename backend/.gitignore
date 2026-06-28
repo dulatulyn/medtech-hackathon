@@ -10,3 +10,4 @@ wheels/
 .venv
 .env
 jwt_imp.md
+storage/.ocr_cache/

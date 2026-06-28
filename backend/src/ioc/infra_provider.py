@@ -3,7 +3,7 @@ from dishka import Provider, Scope, provide
 
 from src.core.config import Config
 from src.integrations.embeddings import EmbeddingModel
-from src.integrations.ocr import AzureOcrProvider, NoOpOcrProvider, OcrProvider
+from src.integrations.ocr import AzureOcrProvider, CachingOcrProvider, NoOpOcrProvider, OcrProvider
 from src.integrations.queue import NoOpQueue, TaskQueue
 from src.integrations.search_index import MeiliIndex
 from src.integrations.storage import LocalStorage, ObjectStorage
@@ -34,7 +34,9 @@ class InfraProvider(Provider):
 
     @provide(scope=Scope.APP)
     def get_ocr(self, config: Config) -> OcrProvider:
-        """Provide the OCR backend: Azure when a key is set, else a NoOp stub."""
+        """Provide the OCR backend (Azure when a key is set, else NoOp), with a disk cache."""
         if config.ocr.azure_key and config.ocr.azure_endpoint:
-            return AzureOcrProvider(config.ocr.azure_endpoint, config.ocr.azure_key)
-        return NoOpOcrProvider()
+            inner = AzureOcrProvider(config.ocr.azure_endpoint, config.ocr.azure_key)
+        else:
+            inner = NoOpOcrProvider()
+        return CachingOcrProvider(inner, config.storage_dir)

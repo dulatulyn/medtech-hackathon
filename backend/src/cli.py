@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.core.config import config
-from src.integrations.ocr import AzureOcrProvider, NoOpOcrProvider, OcrProvider
+from src.integrations.ocr import AzureOcrProvider, CachingOcrProvider, NoOpOcrProvider, OcrProvider
 from src.integrations.queue import NoOpQueue
 from src.integrations.storage import LocalStorage
 from src.repositories.catalog_repository import CatalogRepository
@@ -23,10 +23,12 @@ from src.services.validation_service import ValidationService
 
 
 def _build_ocr() -> OcrProvider:
-    """Build the OCR provider from config: Azure when a key is set, else NoOp."""
+    """Build the OCR provider (Azure when a key is set, else NoOp), with a disk cache."""
     if config.ocr.azure_key and config.ocr.azure_endpoint:
-        return AzureOcrProvider(config.ocr.azure_endpoint, config.ocr.azure_key)
-    return NoOpOcrProvider()
+        inner = AzureOcrProvider(config.ocr.azure_endpoint, config.ocr.azure_key)
+    else:
+        inner = NoOpOcrProvider()
+    return CachingOcrProvider(inner, config.storage_dir)
 
 
 async def _import_archive(path: str) -> None:
