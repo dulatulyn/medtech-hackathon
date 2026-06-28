@@ -1,6 +1,6 @@
 # Nightly Progress — 2026-06-27
 
-## Status: P0–P8 implemented end-to-end
+## Status: P0–P8 complete + verified live (2026-06-28)
 
 ---
 
@@ -147,18 +147,29 @@
 
 ---
 
-## What's Not Done / Gaps
+## Update 2026-06-28 — gaps closed + live end-to-end verification
 
+**Now built & verified live (against running Postgres + Meili):**
+- **OCR** — Azure Document Intelligence (`prebuilt-read`) live; real Cyrillic scan → rows.
+- **Semantic search** — local e5 embeddings + pgvector; `POST /admin/embed` (8 services, ~16s),
+  `/search/semantic?q=мозг` → «МРТ головного мозга» similarity 0.844. Cascade step 5 wired.
+- **Meilisearch** — `POST /admin/reindex` (56 docs); `/search/full` typo-tolerant
+  («аналз крови» → «Общий анализ крови»). Frontend prefers Meili, falls back to pg_trgm.
+- **Currency conversion (ТЗ 4.4)** — `StaticFxConverter` (pluggable to NB RK); `detect_currency`
+  in cleaning; `ParseService._persist_tariff` converts non-KZT → KZT keeping `original_amount`.
+- **Frontend ↔ backend** — all 11 pages live through the Vite proxy; verified browser→proxy→
+  backend→DB returns real data (stats 94.6% match, services/partners/search/anomalies all live).
+  `POST /match` write path confirmed (self-learning synonym added, rate rose 92.9%→94.6%).
+
+**Tests: 60 green** (52 pure-unit incl. 6 new FX/currency + 8 DB-connected: auth/catalog/domain/import/parse).
+
+**Remaining minor gaps (non-blocking):**
 | Item | Notes |
 |---|---|
-| Клиника 5 OCR | Scan with scrambled text layer → `needs_review`; Azure F0 or PaddleOCR stub |
+| Клиника 5 OCR | Scrambled scan text layer; routes to OCR, else `needs_review` |
 | Клиника 8 second sheet ("востребованные") | Minor parser gap — low priority |
-| Semantic/embedding match (Step 5) | Stub returns None; would need sentence-transformer |
-| `normalize_pending()` | Stub returns {}; needs iteration over all docs |
-| DB-connected integration tests | Conftest exists; need live Postgres to run |
-| Meilisearch | Not wired; Postgres trigram search covers the demo |
 | NL search (LLM text-to-filter) | Optional, not built |
-| pgvector embeddings | Columns exist, index created, no embeddings yet |
+| Live FX rate feed | Static rate table; NB RK per-date feed is the drop-in seam |
 
 ---
 
